@@ -26,6 +26,7 @@ import ray
 from ray.tune import grid_search, run, sample_from
 from ray.tune import Trainable
 from ray.tune.schedulers import PopulationBasedTraining
+import random
 
 num_classes = 10
 NUM_SAMPLES = 128
@@ -187,7 +188,7 @@ if __name__ == "__main__":
     train_spec = {
         "resources_per_trial": {
             "cpu": 1,
-            "gpu": 1
+            "gpu": 0
         },
         "stop": {
             "mean_accuracy": 0.80,
@@ -200,7 +201,7 @@ if __name__ == "__main__":
             "decay": sample_from(lambda spec: spec.config.lr / 100.0),
             "dropout": grid_search([0.25, 0.5]),
         },
-        "num_samples": 4,
+        "num_samples": 20,
     }
 
     if args.smoke_test:
@@ -215,7 +216,9 @@ if __name__ == "__main__":
         mode="max",
         perturbation_interval=10,
         hyperparam_mutations={
-            "dropout": lambda _: np.random.uniform(0, 1),
+            "dropout": lambda : np.random.uniform(0, 1),
+            "lr": lambda : np.random.uniform(0.0003, 0.003),
+            "batch_size": lambda : random.choice([64, 128, 256, 512])
         })
 
     run(Cifar10Model, name="pbt_cifar10", scheduler=pbt, **train_spec)

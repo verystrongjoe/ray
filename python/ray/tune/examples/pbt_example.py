@@ -100,7 +100,7 @@ if __name__ == "__main__":
             # distribution for resampling
             "lr": lambda: random.uniform(0.0001, 0.02),
             # allow perturbations within this set of categorical values
-            "some_other_factor": [1, 2],
+            "XX": [1, 2],
         })
 
     run(
@@ -113,10 +113,10 @@ if __name__ == "__main__":
         stop={
             "training_iteration": 200,
         },
-        num_samples=8,
+        num_samples=2,
         config={
             "lr": 0.0001,
             # note: this parameter is perturbed but has no effect on
             # the model training in this example
-            "some_other_factor": 1,
+            "XX": 1,
         })

@@ -217,7 +217,7 @@ def tune_mnist_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
         reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["layer_1_size", "layer_2_size", "lr", "batch_size"],
+        # parameter_columns=["layer_1_size", "layer_2_size", "lr", "batch_size"],
         metric_columns=["loss", "mean_accuracy", "training_iteration"])
 
     tune.run(
@@ -260,7 +260,7 @@ def tune_mnist_pbt(num_samples=10, num_epochs=10, gpus_per_trial=0):
         })
 
     reporter = CLIReporter(
-        parameter_columns=["layer_1_size", "layer_2_size", "lr", "batch_size"],
+        # parameter_columns=["layer_1_size", "layer_2_size", "lr", "batch_size"],
         metric_columns=["loss", "mean_accuracy", "training_iteration"])
 
     tune.run(
