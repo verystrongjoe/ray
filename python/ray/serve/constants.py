@@ -1,5 +1,5 @@
-#: Actor name used to register master actor
-SERVE_MASTER_NAME = "SERVE_MASTER_ACTOR"
+#: Actor name used to register controller
+SERVE_CONTROLLER_NAME = "SERVE_CONTROLLER_ACTOR"
 
 #: Actor name used to register HTTP proxy actor
 SERVE_PROXY_NAME = "SERVE_PROXY_ACTOR"
@@ -18,9 +18,6 @@ DEFAULT_HTTP_PORT = 8000
 
 #: Max concurrency
 ASYNC_CONCURRENCY = int(1e6)
-
-#: Default latency SLO
-DEFAULT_LATENCY_SLO_MS = 1e9
 
 #: Interval for metric client to push metrics to exporters
 METRIC_PUSH_INTERVAL_S = 2

@@ -31,10 +31,10 @@
 #include "ray/core_worker/context.h"
 #include "ray/core_worker/store_provider/memory_store/memory_store.h"
 #include "ray/core_worker/transport/direct_actor_transport.h"
-#include "ray/protobuf/core_worker.pb.h"
-#include "ray/protobuf/gcs.pb.h"
 #include "ray/raylet_client/raylet_client.h"
 #include "ray/util/filesystem.h"
+#include "src/ray/protobuf/core_worker.pb.h"
+#include "src/ray/protobuf/gcs.pb.h"
 
 namespace {
 
@@ -158,11 +158,16 @@ class CoreWorkerTest : public ::testing::Test {
           nullptr,                        // task_execution_callback
           nullptr,                        // check_signals
           nullptr,                        // gc_collect
+          nullptr,                        // spill_objects
+          nullptr,                        // restore_spilled_objects
           nullptr,                        // get_lang_stack
           nullptr,                        // kill_main
           true,                           // ref_counting_enabled
           false,                          // is_local_mode
           1,                              // num_workers
+          nullptr,                        // terminate_asyncio_thread
+          "",                             // serialized_job_config
+          -1,                             // metrics_agent_port
       };
       CoreWorkerProcess::Initialize(options);
     }
@@ -264,7 +269,8 @@ void CoreWorkerTest::TestNormalTask(std::unordered_map<std::string, double> &res
                                                   "MergeInputArgsAsOutput", "", "", ""));
       TaskOptions options;
       std::vector<ObjectID> return_ids;
-      driver.SubmitTask(func, args, options, &return_ids, /*max_retries=*/0);
+      driver.SubmitTask(func, args, options, &return_ids, /*max_retries=*/0,
+                        std::make_pair(PlacementGroupID::Nil(), -1));
 
       ASSERT_EQ(return_ids.size(), 1);
 

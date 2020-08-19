@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "ray/gcs/gcs_client/service_based_gcs_client.h"
-#include <unistd.h>
+
 #include "ray/common/ray_config.h"
 #include "ray/gcs/gcs_client/service_based_accessor.h"
 
@@ -75,6 +75,7 @@ Status ServiceBasedGcsClient::Connect(boost::asio::io_service &io_service) {
   stats_accessor_.reset(new ServiceBasedStatsInfoAccessor(this));
   error_accessor_.reset(new ServiceBasedErrorInfoAccessor(this));
   worker_accessor_.reset(new ServiceBasedWorkerInfoAccessor(this));
+  placement_group_accessor_.reset(new ServiceBasedPlacementGroupInfoAccessor(this));
 
   // Init gcs service address check timer.
   detect_timer_.reset(new boost::asio::deadline_timer(io_service));
@@ -174,6 +175,8 @@ void ServiceBasedGcsClient::GcsServiceFailureDetected(rpc::GcsServiceFailureType
     // because we use the same Redis server for both GCS storage and pub-sub. So the
     // following flag is alway false.
     resubscribe_func_(false);
+    // Resend heartbeat after reconnected, needed by resource view in GCS.
+    node_accessor_->AsyncReReportHeartbeat();
     break;
   default:
     RAY_LOG(FATAL) << "Unsupported failure type: " << type;
