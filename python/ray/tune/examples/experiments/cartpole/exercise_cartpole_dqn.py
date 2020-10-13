@@ -49,6 +49,7 @@ print(f"args.perturbation_interval : {args.perturbation_interval}")
 print(f"args.training_iteration : {args.training_iteration}")
 print(f"args.ucb : {args.ucb}")
 print(f"args.save_dir : {args.save_dir}")
+print(f"args.episode_step : {args.episode_step}")
 
 
 ############################################

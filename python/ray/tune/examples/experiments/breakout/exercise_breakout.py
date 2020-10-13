@@ -35,12 +35,13 @@ import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
 parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=8)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=600)
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=500)
 parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_600')
+parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=1)
 
 args = parser.parse_args()
 print(f"args.n_experiments : {args.n_experiments}")
@@ -54,7 +55,7 @@ print(f"args.ucb : {args.ucb}")
 ############################################
 N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
-# N_EPISODE_STEP = 5
+N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
 N_PARAMS = 6
 K = int(math.pow(2, N_PARAMS))
@@ -138,6 +139,7 @@ class ucb_state:
                     self.max_upper_bound = upper_bound
                     selected = i
             self.num_of_selections[selected] = self.num_of_selections[selected] + 1
+            print(f'self.num_of_selections status is changed like {self.num_of_selections}')
             self.selected = selected
             return selected
         # else:
@@ -169,7 +171,7 @@ def experiment():
     ucbstate = None
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS)
+        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP)
 
     os.makedirs(SAVE_DIR, exist_ok=True)
 
@@ -218,7 +220,8 @@ def experiment():
             "sgd_minibatch_size": sample_from(
                 lambda spec: random.choice([128, 512, 2048])),
             "train_batch_size": sample_from(
-                lambda spec: random.choice([10000, 20000, 40000]))
+                lambda spec: random.choice([10000, 20000, 40000])),
+            "num_gpus":0.25,
 
         })
 
@@ -276,7 +279,6 @@ if __name__ == '__main__':
         list_accuracy = []
         for i in range(N_EXPERIMENTS):
             K = int(math.pow(2, N_PARAMS))
-            NUM_WORKERS = 8
             IS_UCB = u
             IDX = i
             EXPERIMENT_NAME = f'pbt-breakout-{IS_UCB}-{IDX}'
