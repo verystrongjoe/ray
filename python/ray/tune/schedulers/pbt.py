@@ -44,6 +44,7 @@ def explore(config, mutations, resample_probability, custom_explore_fn):
         custom_explore_fn (func): Custom explore fn applied after built-in
             config perturbations are.
     """
+
     new_config = copy.deepcopy(config)
     for key, distribution in mutations.items():
         if isinstance(distribution, dict):
@@ -76,6 +77,7 @@ def explore(config, mutations, resample_probability, custom_explore_fn):
         new_config = custom_explore_fn(new_config)
         assert new_config is not None, \
             "Custom explore fn failed to return new config"
+    # todo: 여기있는 로그는 삭제하고 _exploit()구현부서 perturb 취소된 것과 함꼐 다시 표시
     logger.info("[explore] perturbed config from {} -> {}".format(
         config, new_config))
     return new_config
@@ -182,6 +184,7 @@ class PopulationBasedTraining(FIFOScheduler):
                  reward_attr=None,
                  metric="episode_reward_mean",
                  mode="max",
+                 ucb=None,
                  perturbation_interval=60.0,
                  hyperparam_mutations={},
                  quantile_fraction=0.25,
@@ -199,6 +202,7 @@ class PopulationBasedTraining(FIFOScheduler):
                 "You must specify at least one of `hyperparam_mutations` or "
                 "`custom_explore_fn` to use PBT.")
 
+        # todo: 여기에 보시다시피 절반으로 나누는군!
         if quantile_fraction > 0.5 or quantile_fraction < 0:
             raise TuneError(
                 "You must set `quantile_fraction` to a value between 0 and"
@@ -233,6 +237,8 @@ class PopulationBasedTraining(FIFOScheduler):
         # Metrics
         self._num_checkpoints = 0
         self._num_perturbations = 0
+
+        self._ucb = ucb
 
     def on_trial_add(self, trial_runner, trial):
         self._trial_state[trial] = PBTTrialState(trial)
@@ -271,6 +277,7 @@ class PopulationBasedTraining(FIFOScheduler):
         if self._metric not in result or self._time_attr not in result:
             return TrialScheduler.CONTINUE
 
+        # todo : 여기에 result가 어떻게 넘어오는지 확인해보자 어떤값일까?
         time = result[self._time_attr]
         state = self._trial_state[trial]
 
@@ -280,6 +287,8 @@ class PopulationBasedTraining(FIFOScheduler):
         score = self._metric_op * result[self._metric]
         state.last_score = score
         state.last_perturbation_time = time
+
+        # todo: 왜 quantile()을 호출하지? 상위/하위 구분하는것 같고 trials다 상태확인 해보자
         lower_quantile, upper_quantile = self._quantiles()
 
         if trial in upper_quantile:
@@ -345,9 +354,27 @@ class PopulationBasedTraining(FIFOScheduler):
             logger.info("[pbt]: no checkpoint for trial."
                         " Skip exploit for Trial {}".format(trial))
             return
+
         new_config = explore(trial_to_clone.config, self._hyperparam_mutations,
                              self._resample_probability,
                              self._custom_explore_fn)
+
+        # todo : 여기에서 new_config를 하고 변경된 파라메터를 돌리는작업이 필요함
+        old_config = trial_to_clone.config
+
+        if self._ucb is not None:
+            self._ucb.n = self._ucb.n + 1
+            masks = self._ucb.bitfield(self._ucb.selected)
+            print(f'explore!!!! ucb_state n: {self._ucb.n}, selected : {self._ucb.selected}, masks : {masks}')
+
+            # todo: perturb취소하는 로직 추가
+            print(new_config)
+
+
+        logger.info("[explore] perturbed ucb config from {} -> {}".format(
+            old_config, new_config))
+        
+
         logger.info("[exploit] transferring weights from trial "
                     "{} (score {}) -> {} (score {})".format(
                         trial_to_clone, new_state.last_score, trial,

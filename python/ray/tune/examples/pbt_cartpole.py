@@ -20,7 +20,7 @@ import math
 
 N_EPISODE = 5000
 N_EPISODE_STEP = 1
-N_PARAMS = 5
+N_PARAMS = 2
 K = int(math.pow(2, N_PARAMS)) - 2
 
 
@@ -35,6 +35,7 @@ class ucb_state:
         size = len(bits)
         pad = [0] * (self.n_arms - size)
         return pad + bits
+
 
 if __name__ == "__main__":
 
@@ -66,24 +67,23 @@ if __name__ == "__main__":
         resample_probability=0.25,
         # Specifies the mutations of these hyperparams
         hyperparam_mutations={
-            "lr": [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
+            # "lr": [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
             "train_batch_size": lambda: random.randint(32, 256),
-            "buffer_size": [5000, 10000, 50000],
+            # "buffer_size": [5000, 10000, 50000],
             # "prioritized_replay": [True, False],
             "target_network_update_freq": lambda: random.randint(10, 1000)
         },
         custom_explore_fn=explore)
 
-
     for e in range(N_EPISODE):
-        print('--------------------------- episode started---------------------------')
+        print(f'--------------------------- {e} episode started---------------------------')
         if e == 0:
             resume = False
         else:
-            resume = True
+            resume = False
 
         for n in range(N_EPISODE_STEP):
-            print('--------------------------- episode step started---------------------------')
+            print(f'--------------------------- episode step {n}---------------------------')
             selected = 0
             max_upper_bound = 0
             # scheduler._hyperparam_mutations = origin_dic_params
@@ -104,7 +104,6 @@ if __name__ == "__main__":
 
             masked_dic_params = {}
             ucbstate.selected = selected
-            pbt._ucb = ucbstate
 
             numbers_of_selections[selected] += 1
 
@@ -114,7 +113,7 @@ if __name__ == "__main__":
                     "env": "CartPole-v0",
                     "stop": {"episodes_this_iter": 5*(e+1)},
                     "config": {
-                        "num_workers": 1,
+                        "num_workers": 5,
                         "num_gpus": 0,
                         # "num_cpus": 128,
                         "lr": 1e-4,

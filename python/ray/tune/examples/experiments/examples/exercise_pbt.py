@@ -166,7 +166,7 @@ for e in range(N_EPISODE):
         max_upper_bound = 0
         # scheduler._hyperparam_mutations = origin_dic_params
 
-        for i in range(0, K):
+        for i in range(1, K):  # nothing is no!!
             if numbers_of_selections[i] > 0:
                 average_reward = sums_of_reward[i] / numbers_of_selections[i]
                 delta_i = math.sqrt(2 * math.log(n+1) / numbers_of_selections[i])

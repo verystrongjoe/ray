@@ -895,6 +895,8 @@ class Trainable:
 
         .. versionchanged:: 0.8.7
         """
+        result['ucb'] ='ucb-~~~~~~~~~~~~~~~~~~~'
+
         self._result_logger.on_result(result)
 
     def cleanup(self):
