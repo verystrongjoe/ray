@@ -5,6 +5,7 @@ import tree
 from typing import Dict, List, Optional
 
 from ray.rllib.policy.sample_batch import SampleBatch
+from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.utils.annotations import DeveloperAPI
 from ray.rllib.utils.exploration.exploration import Exploration
 from ray.rllib.utils.framework import try_import_torch
@@ -70,6 +71,18 @@ class Policy(metaclass=ABCMeta):
         # The action distribution class to use for action sampling, if any.
         # Child classes may set this.
         self.dist_class = None
+        # View requirements dict for a `learn_on_batch()` call.
+        # Child classes need to add their specific requirements here (usually
+        # a combination of a Model's inference_view_- and the
+        # Policy's loss function-requirements.
+        self.view_requirements = {
+            SampleBatch.OBS: ViewRequirement(),
+            SampleBatch.ACTIONS: ViewRequirement(space=self.action_space),
+            SampleBatch.REWARDS: ViewRequirement(),
+            SampleBatch.DONES: ViewRequirement(),
+            SampleBatch.EPS_ID: ViewRequirement(),
+            SampleBatch.AGENT_INDEX: ViewRequirement(),
+        }
 
     @abstractmethod
     @DeveloperAPI
@@ -250,7 +263,23 @@ class Policy(metaclass=ABCMeta):
                     shape like
                     {"f1": [BATCH_SIZE, ...], "f2": [BATCH_SIZE, ...]}.
         """
-        raise NotImplementedError
+        # Default implementation just passes obs, prev-a/r, and states on to
+        # `self.compute_actions()`.
+        state_batches = [
+            s.unsqueeze(0)
+            if torch and isinstance(s, torch.Tensor) else np.expand_dims(s, 0)
+            for k, s in input_dict.items() if k[:9] == "state_in_"
+        ]
+        return self.compute_actions(
+            input_dict[SampleBatch.OBS],
+            state_batches,
+            prev_action_batch=input_dict.get(SampleBatch.PREV_ACTIONS),
+            prev_reward_batch=input_dict.get(SampleBatch.PREV_REWARDS),
+            info_batch=None,
+            explore=explore,
+            timestep=timestep,
+            **kwargs,
+        )
 
     @DeveloperAPI
     def compute_log_likelihoods(
@@ -282,25 +311,6 @@ class Policy(metaclass=ABCMeta):
                 [BATCH_SIZE].
         """
         raise NotImplementedError
-
-    @DeveloperAPI
-    def training_view_requirements(self):
-        """Returns a dict of view requirements for operating on this Policy.
-
-        Note: This is an experimental API method.
-
-        The view requirements dict is used to generate input_dicts and
-        SampleBatches for 1) action computations, 2) postprocessing, and 3)
-        generating training batches.
-        The Policy may ask its Model(s) as well for possible additional
-        requirements (e.g. prev-action/reward in an LSTM).
-
-        Returns:
-            Dict[str, ViewRequirement]: The view requirements dict, mapping
-                each view key (which will be available in input_dicts) to
-                an underlying requirement (actual data, timestep shift, etc..).
-        """
-        return {}
 
     @DeveloperAPI
     def postprocess_trajectory(

@@ -34,12 +34,13 @@ import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
 parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=16)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=500)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_dqn_500')
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=100)
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_dqn_100')
+parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=1)
 
 args = parser.parse_args()
 print(f"args.n_experiments : {args.n_experiments}")
@@ -50,14 +51,12 @@ print(f"args.ucb : {args.ucb}")
 print(f"args.save_dir : {args.save_dir}")
 
 
-
-
 ############################################
 # 실험 파라메터
 ############################################
 N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
-# N_EPISODE_STEP = 5
+N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
 N_PARAMS = 3
 K = int(math.pow(2, N_PARAMS))
@@ -139,6 +138,7 @@ class ucb_state:
                     self.max_upper_bound = upper_bound
                     selected = i
             self.num_of_selections[selected] = self.num_of_selections[selected] + 1
+            print(f'self.num_of_selections status is changed like {self.num_of_selections}')
             self.selected = selected
             return selected
         # else:
@@ -147,7 +147,6 @@ class ucb_state:
     # 스코어(accuracy or reward or any metric)을 저장한다.
     # reflected_reward에서는 지난 리워드 반영 체크해야함 
     # pull() 하기전에 reward를 반영해줘야함
-    
     def reflect_reward(self, episode_reward):
         assert self.n != 0 and self.n % self.n_episode_iteration == 0
         # 이전 score와의 차이를 저장
@@ -172,7 +171,7 @@ def experiment():
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS)
+        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -281,7 +280,6 @@ if __name__ == '__main__':
         list_accuracy = []
         for i in range(N_EXPERIMENTS):
             K = int(math.pow(2, N_PARAMS))
-            NUM_WORKERS = 8
             IS_UCB = u
             IDX = i
             EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{IDX}'

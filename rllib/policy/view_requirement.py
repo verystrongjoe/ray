@@ -30,7 +30,7 @@ class ViewRequirement:
                  data_col: Optional[str] = None,
                  space: gym.Space = None,
                  shift: Union[int, List[int]] = 0,
-                 created_during_postprocessing: bool = False):
+                 used_for_training: bool = True):
         """Initializes a ViewRequirement object.
 
         Args:
@@ -47,11 +47,12 @@ class ViewRequirement:
                 Example: For a view column "obs" in an Atari framestacking
                 fashion, you can set `data_col="obs"` and
                 `shift=[-3, -2, -1, 0]`.
-            created_during_postprocessing (bool): Whether this column only gets
-                created during postprocessing.
+            used_for_training (bool): Whether the data will be used for
+                training. If False, the column will not be copied into the
+                final train batch.
         """
         self.data_col = data_col
         self.space = space or gym.spaces.Box(
             float("-inf"), float("inf"), shape=())
         self.shift = shift
-        self.created_during_postprocessing = created_during_postprocessing
+        self.used_for_training = used_for_training

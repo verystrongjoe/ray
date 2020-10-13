@@ -1,5 +1,5 @@
 import gym
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 from ray.rllib.models.catalog import ModelCatalog
 from ray.rllib.models.modelv2 import ModelV2
@@ -22,13 +22,16 @@ torch, _ = try_import_torch()
 def build_torch_policy(
         name: str,
         *,
-        loss_fn: Callable[[Policy, ModelV2, type, SampleBatch], TensorType],
+        loss_fn: Optional[Callable[[
+            Policy, ModelV2, Type[TorchDistributionWrapper], SampleBatch
+        ], Union[TensorType, List[TensorType]]]],
         get_default_config: Optional[Callable[[], TrainerConfigDict]] = None,
         stats_fn: Optional[Callable[[Policy, SampleBatch], Dict[
             str, TensorType]]] = None,
         postprocess_fn: Optional[Callable[[
-            Policy, SampleBatch, List[SampleBatch], "MultiAgentEpisode"
-        ], None]] = None,
+            Policy, SampleBatch, Optional[Dict[Any, SampleBatch]], Optional[
+                "MultiAgentEpisode"]
+        ], SampleBatch]] = None,
         extra_action_out_fn: Optional[Callable[[
             Policy, Dict[str, TensorType], List[TensorType], ModelV2,
             TorchDistributionWrapper
@@ -57,32 +60,35 @@ def build_torch_policy(
         ], ModelV2]] = None,
         make_model_and_action_dist: Optional[Callable[[
             Policy, gym.spaces.Space, gym.spaces.Space, TrainerConfigDict
-        ], Tuple[ModelV2, TorchDistributionWrapper]]] = None,
+        ], Tuple[ModelV2, Type[TorchDistributionWrapper]]]] = None,
         apply_gradients_fn: Optional[Callable[
             [Policy, "torch.optim.Optimizer"], None]] = None,
         mixins: Optional[List[type]] = None,
-        training_view_requirements_fn: Optional[Callable[[], Dict[
+        view_requirements_fn: Optional[Callable[[], Dict[
             str, ViewRequirement]]] = None,
-        get_batch_divisibility_req: Optional[Callable[[Policy], int]] = None):
+        get_batch_divisibility_req: Optional[Callable[[Policy], int]] = None
+) -> Type[TorchPolicy]:
     """Helper function for creating a torch policy class at runtime.
 
     Args:
         name (str): name of the policy (e.g., "PPOTorchPolicy")
-        loss_fn (Callable[[Policy, ModelV2, type, SampleBatch], TensorType]):
-            Callable that returns a loss tensor.
+        loss_fn (Optional[Callable[[Policy, ModelV2,
+            Type[TorchDistributionWrapper], SampleBatch], Union[TensorType,
+            List[TensorType]]]]): Callable that returns a loss tensor.
         get_default_config (Optional[Callable[[None], TrainerConfigDict]]):
             Optional callable that returns the default config to merge with any
             overrides. If None, uses only(!) the user-provided
             PartialTrainerConfigDict as dict for this Policy.
         postprocess_fn (Optional[Callable[[Policy, SampleBatch,
-            List[SampleBatch], MultiAgentEpisode], None]]): Optional callable
-            for post-processing experience batches (called after the
-            super's `postprocess_trajectory` method).
+            Optional[Dict[Any, SampleBatch]], Optional["MultiAgentEpisode"]],
+            SampleBatch]]): Optional callable for post-processing experience
+            batches (called after the super's `postprocess_trajectory` method).
         stats_fn (Optional[Callable[[Policy, SampleBatch],
             Dict[str, TensorType]]]): Optional callable that returns a dict of
-            values given the policy and batch input tensors. If None,
-            will use `TorchPolicy.extra_grad_info()` instead.
-        extra_action_out_fn (Optional[Callable[[Policy, Dict[str, TensorType,
+            values given the policy and training batch. If None,
+            will use `TorchPolicy.extra_grad_info()` instead. The stats dict is
+            used for logging (e.g. in TensorBoard).
+        extra_action_out_fn (Optional[Callable[[Policy, Dict[str, TensorType],
             List[TensorType], ModelV2, TorchDistributionWrapper]], Dict[str,
             TensorType]]]): Optional callable that returns a dict of extra
             values to include in experiences. If None, no extra computations
@@ -140,9 +146,10 @@ def build_torch_policy(
             a default Model will be created.
         make_model_and_action_dist (Optional[Callable[[Policy,
             gym.spaces.Space, gym.spaces.Space, TrainerConfigDict],
-            Tuple[ModelV2, TorchDistributionWrapper]]]): Optional callable that
-            takes the same arguments as Policy.__init__ and returns a tuple
-            of model instance and torch action distribution class.
+            Tuple[ModelV2, Type[TorchDistributionWrapper]]]]): Optional
+            callable that takes the same arguments as Policy.__init__ and
+            returns a tuple of model instance and torch action distribution
+            class.
             Note: Only one of `make_model` or `make_model_and_action_dist`
             should be provided. If both are None, a default Model will be
             created.
@@ -154,7 +161,7 @@ def build_torch_policy(
         mixins (Optional[List[type]]): Optional list of any class mixins for
             the returned policy class. These mixins will be applied in order
             and will have higher precedence than the TorchPolicy class.
-        training_view_requirements_fn (Callable[[],
+        view_requirements_fn (Callable[[],
             Dict[str, ViewRequirement]]): An optional callable to retrieve
             additional train view requirements for this policy.
         get_batch_divisibility_req (Optional[Callable[[Policy], int]]):
@@ -162,7 +169,8 @@ def build_torch_policy(
             sample batches. If None, will assume a value of 1.
 
     Returns:
-        type: TorchPolicy child class constructed from the specified args.
+        Type[TorchPolicy]: TorchPolicy child class constructed from the
+            specified args.
     """
 
     original_kwargs = locals().copy()
@@ -221,15 +229,11 @@ def build_torch_policy(
                 get_batch_divisibility_req=get_batch_divisibility_req,
             )
 
+            if callable(view_requirements_fn):
+                self.view_requirements.update(view_requirements_fn(self))
+
             if after_init:
                 after_init(self, obs_space, action_space, config)
-
-        @override(TorchPolicy)
-        def training_view_requirements(self):
-            req = super().training_view_requirements()
-            if callable(training_view_requirements_fn):
-                req.update(training_view_requirements_fn(self))
-            return req
 
         @override(Policy)
         def postprocess_trajectory(self,
@@ -298,9 +302,8 @@ def build_torch_policy(
                 optimizers = TorchPolicy.optimizer(self)
             optimizers = force_list(optimizers)
             if hasattr(self, "exploration"):
-                exploration_optimizers = force_list(
-                    self.exploration.get_exploration_optimizer(self.config))
-                optimizers.extend(exploration_optimizers)
+                optimizers = self.exploration.get_exploration_optimizer(
+                    optimizers)
             return optimizers
 
         @override(TorchPolicy)

@@ -50,7 +50,7 @@ def test_worker_stats(shutdown_only):
 
     @ray.remote
     def f():
-        ray.show_in_webui("test")
+        ray.show_in_dashboard("test")
         return os.getpid()
 
     @ray.remote
@@ -59,10 +59,10 @@ def test_worker_stats(shutdown_only):
             pass
 
         def f(self):
-            ray.show_in_webui("test")
+            ray.show_in_dashboard("test")
             return os.getpid()
 
-    # Test show_in_webui for remote functions.
+    # Test show_in_dashboard for remote functions.
     worker_pid = ray.get(f.remote())
     reply = try_get_node_stats()
     target_worker_present = False
@@ -75,7 +75,7 @@ def test_worker_stats(shutdown_only):
             assert stats.webui_display[""] == ""  # Empty proto
     assert target_worker_present
 
-    # Test show_in_webui for remote actors.
+    # Test show_in_dashboard for remote actors.
     a = Actor.remote()
     worker_pid = ray.get(a.f.remote())
     reply = try_get_node_stats()
@@ -132,7 +132,7 @@ def test_worker_stats(shutdown_only):
     assert (wait_until_server_available(addresses["webui_url"]) is True)
 
     webui_url = addresses["webui_url"]
-    webui_url = webui_url.replace("localhost", "http://127.0.0.1")
+    webui_url = webui_url.replace("127.0.0.1", "http://127.0.0.1")
     for worker in reply.workers_stats:
         if worker.is_driver:
             continue
@@ -198,7 +198,7 @@ def test_raylet_info_endpoint(shutdown_only):
         time.sleep(1)
         try:
             webui_url = addresses["webui_url"]
-            webui_url = webui_url.replace("localhost", "http://127.0.0.1")
+            webui_url = webui_url.replace("127.0.0.1", "http://127.0.0.1")
             response = requests.get(webui_url + "/api/raylet_info")
             response.raise_for_status()
             try:
@@ -206,13 +206,10 @@ def test_raylet_info_endpoint(shutdown_only):
             except Exception as ex:
                 print("failed response: {}".format(response.text))
                 raise ex
-            actors_info = raylet_info["result"]["actors"]
+            actor_groups = raylet_info["result"]["actorGroups"]
             try:
-                assert len(actors_info) == 3
-                c_actor_info = [
-                    actor for actor in actors_info.values()
-                    if "ActorC" in actor["actorTitle"]
-                ][0]
+                assert len(actor_groups.keys()) == 3
+                c_actor_info = actor_groups["ActorC"]["entries"][0]
                 assert c_actor_info["numObjectRefsInScope"] == 13
                 assert c_actor_info["numLocalObjects"] == 10
                 break
@@ -276,15 +273,14 @@ def test_raylet_infeasible_tasks(shutdown_only):
 
     def test_infeasible_actor(ray_addresses):
         assert (wait_until_server_available(addresses["webui_url"]) is True)
-        webui_url = ray_addresses["webui_url"].replace("localhost",
+        webui_url = ray_addresses["webui_url"].replace("127.0.0.1",
                                                        "http://127.0.0.1")
         raylet_info = requests.get(webui_url + "/api/raylet_info").json()
-        actor_info = raylet_info["result"]["actors"]
+        actor_info = raylet_info["result"]["actorGroups"]
         assert len(actor_info) == 1
 
         _, infeasible_actor_info = actor_info.popitem()
-        assert infeasible_actor_info["state"] == -1
-        assert infeasible_actor_info["invalidStateType"] == "infeasibleActor"
+        assert infeasible_actor_info["entries"][0]["state"] == -2
 
     assert (wait_until_succeeded_without_exception(
         test_infeasible_actor,
@@ -316,7 +312,7 @@ def test_raylet_pending_tasks(shutdown_only):
 
     def test_pending_actor(ray_addresses):
         assert (wait_until_server_available(addresses["webui_url"]) is True)
-        webui_url = ray_addresses["webui_url"].replace("localhost",
+        webui_url = ray_addresses["webui_url"].replace("127.0.0.1",
                                                        "http://127.0.0.1")
         raylet_info = requests.get(webui_url + "/api/raylet_info").json()
         actor_info = raylet_info["result"]["actors"]
@@ -406,10 +402,10 @@ def test_memory_dashboard(shutdown_only):
     """Test Memory table.
 
     These tests verify examples in this document.
-    https://docs.ray.io/en/latest/memory-management.html#debugging-using-ray-memory
+    https://docs.ray.io/en/master/memory-management.html#debugging-using-ray-memory
     """
     addresses = ray.init(num_cpus=2)
-    webui_url = addresses["webui_url"].replace("localhost", "http://127.0.0.1")
+    webui_url = addresses["webui_url"].replace("127.0.0.1", "http://127.0.0.1")
     assert (wait_until_server_available(addresses["webui_url"]) is True)
 
     def get_memory_table():

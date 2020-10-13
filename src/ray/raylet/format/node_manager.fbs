@@ -82,12 +82,6 @@ enum MessageType:int {
   SetResourceRequest,
   // Subscribe to Plasma updates
   SubscribePlasmaReady,
-  // Manually spill objects to external storage.
-  ForceSpillObjectsRequest,
-  ForceSpillObjectsReply,
-  // Manually restore objects from external storage.
-  ForceRestoreSpilledObjectsRequest,
-  ForceRestoreSpilledObjectsReply,
 }
 
 table TaskExecutionSpecification {
@@ -153,14 +147,18 @@ table RegisterClientRequest {
 }
 
 table RegisterClientReply {
-  // GCS ClientID of the local node manager.
+  // Whether the registration succeeded.
+  success: bool;
+  // The reason of registration failure.
+  failure_reason: string;
+  // GCS NodeID of the local node manager.
   raylet_id: string;
   // Port that this worker should listen on.
   port: int;
   // Keys for internal config options.
-  internal_config_keys: [string];
+  system_config_keys: [string];
   // Values for internal config options corresponding to keys above.
-  internal_config_values: [string];
+  system_config_values: [string];
 }
 
 table AnnounceWorkerPort {
@@ -306,12 +304,4 @@ table ForceSpillObjectsRequest {
 }
 
 table ForceSpillObjectsReply {
-}
-
-table ForceRestoreSpilledObjectsRequest {
-  // List of object IDs to be restored from external storage.
-  object_ids: [string];
-}
-
-table ForceRestoreSpilledObjectsReply {
 }

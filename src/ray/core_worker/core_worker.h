@@ -51,16 +51,44 @@ namespace ray {
 
 class CoreWorker;
 
+// If you change this options's definition, you must change the options used in
+// other files. Please take a global search and modify them !!!
 struct CoreWorkerOptions {
   // Callback that must be implemented and provided by the language-specific worker
   // frontend to execute tasks and return their results.
   using TaskExecutionCallback = std::function<Status(
-      TaskType task_type, const RayFunction &ray_function,
+      TaskType task_type, const std::string task_name, const RayFunction &ray_function,
       const std::unordered_map<std::string, double> &required_resources,
       const std::vector<std::shared_ptr<RayObject>> &args,
       const std::vector<ObjectID> &arg_reference_ids,
       const std::vector<ObjectID> &return_ids,
       std::vector<std::shared_ptr<RayObject>> *results)>;
+
+  CoreWorkerOptions()
+      : store_socket(""),
+        raylet_socket(""),
+        enable_logging(false),
+        log_dir(""),
+        install_failure_signal_handler(false),
+        node_ip_address(""),
+        node_manager_port(0),
+        raylet_ip_address(""),
+        driver_name(""),
+        stdout_file(""),
+        stderr_file(""),
+        task_execution_callback(nullptr),
+        check_signals(nullptr),
+        gc_collect(nullptr),
+        spill_objects(nullptr),
+        restore_spilled_objects(nullptr),
+        get_lang_stack(nullptr),
+        kill_main(nullptr),
+        ref_counting_enabled(false),
+        is_local_mode(false),
+        num_workers(0),
+        terminate_asyncio_thread(nullptr),
+        serialized_job_config(""),
+        metrics_agent_port(-1) {}
 
   /// Type of this worker (i.e., DRIVER or WORKER).
   WorkerType worker_type;
@@ -291,7 +319,7 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
   /// Public methods used by `CoreWorkerProcess` and `CoreWorker` itself.
   ///
 
-  /// Gracefully disconnect the worker from other components of ray. e.g. Raylet.
+  /// Gracefully disconnect the worker from Raylet.
   /// If this function is called during shutdown, Raylet will treat it as an intentional
   /// disconnect.
   ///
@@ -321,6 +349,16 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
   const TaskID &GetCurrentTaskId() const { return worker_context_.GetCurrentTaskID(); }
 
   const JobID &GetCurrentJobId() const { return worker_context_.GetCurrentJobID(); }
+
+  NodeID GetCurrentNodeId() const { return NodeID::FromBinary(rpc_address_.raylet_id()); }
+
+  const PlacementGroupID &GetCurrentPlacementGroupId() const {
+    return worker_context_.GetCurrentPlacementGroupId();
+  }
+
+  bool ShouldCaptureChildTasksInPlacementGroup() const {
+    return worker_context_.ShouldCaptureChildTasksInPlacementGroup();
+  }
 
   void SetWebuiDisplay(const std::string &key, const std::string &message);
 
@@ -581,20 +619,18 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
   /// Sets a resource with the specified capacity and client id
   /// \param[in] resource_name Name of the resource to be set.
   /// \param[in] capacity Capacity of the resource.
-  /// \param[in] client_Id ClientID where the resource is to be set.
+  /// \param[in] client_Id NodeID where the resource is to be set.
   /// \return Status
   Status SetResource(const std::string &resource_name, const double capacity,
-                     const ClientID &client_id);
+                     const NodeID &client_id);
 
-  /// Force spilling objects to external storage.
+  /// Request an object to be spilled to external storage.
   /// \param[in] object_ids The objects to be spilled.
-  /// \return Status
-  Status ForceSpillObjects(const std::vector<ObjectID> &object_ids);
-
-  /// Restore objects from external storage.
-  /// \param[in] object_ids The objects to be restored.
-  /// \return Status
-  Status ForceRestoreSpilledObjects(const std::vector<ObjectID> &object_ids);
+  /// \return Status. Returns Status::Invalid if any of the objects are not
+  /// eligible for spilling (they have gone out of scope or we do not own the
+  /// object). Otherwise, the return status is ok and we will use best effort
+  /// to spill the object.
+  Status SpillObjects(const std::vector<ObjectID> &object_ids);
 
   /// Submit a normal task.
   ///
@@ -602,10 +638,15 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
   /// \param[in] args Arguments of this task.
   /// \param[in] task_options Options for this task.
   /// \param[out] return_ids Ids of the return objects.
+  /// \param[in] max_retires max number of retry when the task fails.
+  /// \param[in] placement_options placement group options.
+  /// \param[in] placement_group_capture_child_tasks whether or not the submitted task
+  /// should capture parent's placement group implicilty.
   void SubmitTask(const RayFunction &function,
                   const std::vector<std::unique_ptr<TaskArg>> &args,
                   const TaskOptions &task_options, std::vector<ObjectID> *return_ids,
-                  int max_retries, PlacementOptions placement_options);
+                  int max_retries, PlacementOptions placement_options,
+                  bool placement_group_capture_child_tasks);
 
   /// Create an actor.
   ///
@@ -844,6 +885,10 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
                                    rpc::RestoreSpilledObjectsReply *reply,
                                    rpc::SendReplyCallback send_reply_callback) override;
 
+  // Make the this worker exit.
+  void HandleExit(const rpc::ExitRequest &request, rpc::ExitReply *reply,
+                  rpc::SendReplyCallback send_reply_callback) override;
+
   ///
   /// Public methods related to async actor call. This should only be used when
   /// the actor is (1) direct actor and (2) using asyncio mode.
@@ -996,6 +1041,11 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
   /// Handler if a raylet node is removed from the cluster.
   void OnNodeRemoved(const rpc::GcsNodeInfo &node_info);
 
+  /// Request the spillage of an object that we own from the primary that hosts
+  /// the primary copy to spill.
+  void SpillOwnedObject(const ObjectID &object_id, const std::shared_ptr<RayObject> &obj,
+                        std::function<void()> callback);
+
   const CoreWorkerOptions options_;
 
   /// Callback to get the current language (e.g., Python) call site.
@@ -1031,6 +1081,9 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
 
   /// Shared client call manager.
   std::unique_ptr<rpc::ClientCallManager> client_call_manager_;
+
+  /// Shared core worker client pool.
+  std::shared_ptr<rpc::CoreWorkerClientPool> core_worker_client_pool_;
 
   /// Timer used to periodically check if the raylet has died.
   boost::asio::steady_timer death_check_timer_;

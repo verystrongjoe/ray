@@ -73,6 +73,7 @@ class WorkerPool : public WorkerPoolInterface {
   /// the pool.
   ///
   /// \param num_workers The number of workers to start, per language.
+  /// \param num_workers_soft_limit The soft limit of the number of workers.
   /// \param num_initial_python_workers_for_first_job The number of initial Python
   /// workers for the first job.
   /// \param maximum_startup_concurrency The maximum number of worker processes
@@ -88,7 +89,7 @@ class WorkerPool : public WorkerPoolInterface {
   /// \param starting_worker_timeout_callback The callback that will be triggered once
   /// it times out to start a worker.
   WorkerPool(boost::asio::io_service &io_service, int num_workers,
-             int num_initial_python_workers_for_first_job,
+             int num_workers_soft_limit, int num_initial_python_workers_for_first_job,
              int maximum_startup_concurrency, int min_worker_port, int max_worker_port,
              std::shared_ptr<gcs::GcsClient> gcs_client,
              const WorkerCommandMap &worker_commands,
@@ -121,7 +122,13 @@ class WorkerPool : public WorkerPoolInterface {
   /// Returns 0 if the worker should bind on a random port.
   /// \return If the registration is successful.
   Status RegisterWorker(const std::shared_ptr<WorkerInterface> &worker, pid_t pid,
-                        std::function<void(int)> send_reply_callback);
+                        std::function<void(Status, int)> send_reply_callback);
+
+  /// To be invoked when a worker is started. This method should be called when the worker
+  /// announces its port.
+  ///
+  /// \param[in] worker The worker which is started.
+  void OnWorkerStarted(const std::shared_ptr<WorkerInterface> &worker);
 
   /// Register a new driver.
   ///
@@ -133,7 +140,7 @@ class WorkerPool : public WorkerPoolInterface {
   /// \return If the registration is successful.
   Status RegisterDriver(const std::shared_ptr<WorkerInterface> &worker,
                         const JobID &job_id, const rpc::JobConfig &job_config,
-                        std::function<void(int)> send_reply_callback);
+                        std::function<void(Status, int)> send_reply_callback);
 
   /// Get the client connection's registered worker.
   ///
@@ -204,13 +211,17 @@ class WorkerPool : public WorkerPoolInterface {
 
   /// Get all the registered workers.
   ///
-  /// \return A list containing all the workers.
-  const std::vector<std::shared_ptr<WorkerInterface>> GetAllRegisteredWorkers() const;
+  /// \param filter_dead_workers whether or not if this method will filter dead workers
+  /// that are still registered. \return A list containing all the workers.
+  const std::vector<std::shared_ptr<WorkerInterface>> GetAllRegisteredWorkers(
+      bool filter_dead_workers = false) const;
 
   /// Get all the registered drivers.
   ///
-  /// \return A list containing all the drivers.
-  const std::vector<std::shared_ptr<WorkerInterface>> GetAllRegisteredDrivers() const;
+  /// \param filter_dead_drivers whether or not if this method will filter dead drivers
+  /// that are still registered. \return A list containing all the drivers.
+  const std::vector<std::shared_ptr<WorkerInterface>> GetAllRegisteredDrivers(
+      bool filter_dead_drivers = false) const;
 
   /// Whether there is a pending worker for the given task.
   /// Note that, this is only used for actor creation task with dynamic options.
@@ -260,7 +271,7 @@ class WorkerPool : public WorkerPoolInterface {
   /// the environment variables of the parent process.
   /// \return An object representing the started worker process.
   virtual Process StartProcess(const std::vector<std::string> &worker_command_args,
-                               const std::map<std::string, std::string> &env);
+                               const ProcessEnvironment &env);
 
   /// Push an warning message to user if worker pool is getting to big.
   virtual void WarnAboutSize();
@@ -352,8 +363,24 @@ class WorkerPool : public WorkerPoolInterface {
   /// started.
   void TryStartIOWorkers(const Language &language, State &state);
 
+  /// Try killing idle workers to ensure the running workers are in a
+  /// reasonable size.
+  void TryKillingIdleWorkers();
+
+  /// Schedule the periodic killing of idle workers.
+  void ScheduleIdleWorkerKilling();
+
+  /// Get all workers of the given process.
+  ///
+  /// \param process The process of workers.
+  /// \return The workers of the given process.
+  std::unordered_set<std::shared_ptr<WorkerInterface>> GetWorkersByProcess(
+      const Process &process);
+
   /// For Process class for managing subprocesses (e.g. reaping zombies).
   boost::asio::io_service *io_service_;
+  /// The soft limit of the number of registered workers.
+  int num_workers_soft_limit_;
   /// The maximum number of worker processes that can be started concurrently.
   int maximum_startup_concurrency_;
   /// Keeps track of unused ports that newly-created workers can bind on.
@@ -385,6 +412,19 @@ class WorkerPool : public WorkerPoolInterface {
 
   /// This map tracks the latest infos of unfinished jobs.
   absl::flat_hash_map<JobID, rpc::JobConfig> unfinished_jobs_;
+
+  /// The pool of idle non-actor workers of all languages. This is used to kill idle
+  /// workers in FIFO order. The second element of std::pair is the time a worker becomes
+  /// idle.
+  std::list<std::pair<std::shared_ptr<WorkerInterface>, int64_t>> idle_of_all_languages_;
+
+  /// This map stores the same data as `idle_of_all_languages_`, but in a map structure
+  /// for lookup performance.
+  std::unordered_map<std::shared_ptr<WorkerInterface>, int64_t>
+      idle_of_all_languages_map_;
+
+  /// The timer to trigger idle worker killing.
+  boost::asio::deadline_timer kill_idle_workers_timer_;
 };
 
 }  // namespace raylet

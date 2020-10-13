@@ -15,12 +15,13 @@ import os
 import shutil
 from functools import partial
 from tempfile import mkdtemp
-from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities.cloud_io import load as pl_load
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+from ray.tune.integration.pytorch_lightning import TuneReportCallback, \
+    TuneReportCheckpointCallback
 # __import_tune_end__
 
 
@@ -76,27 +77,23 @@ class LightningMNISTClassifier(pl.LightningModule):
         loss = self.cross_entropy_loss(logits, y)
         accuracy = self.accuracy(logits, y)
 
-        logs = {"ptl/train_loss": loss, "ptl/train_accuracy": accuracy}
-        return {"loss": loss, "log": logs}
+        self.log("ptl/train_loss", loss)
+        self.log("ptl/train_accuracy", accuracy)
+        return loss
 
     def validation_step(self, val_batch, batch_idx):
         x, y = val_batch
         logits = self.forward(x)
         loss = self.cross_entropy_loss(logits, y)
         accuracy = self.accuracy(logits, y)
-
         return {"val_loss": loss, "val_accuracy": accuracy}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         avg_acc = torch.stack([x["val_accuracy"] for x in outputs]).mean()
-        logs = {"ptl/val_loss": avg_loss, "ptl/val_accuracy": avg_acc}
+        self.log("ptl/val_loss", avg_loss)
+        self.log("ptl/val_accuracy", avg_acc)
 
-        return {
-            "avg_val_loss": avg_loss,
-            "avg_val_accuracy": avg_acc,
-            "log": logs
-        }
 
     @staticmethod
     def download_data(data_dir):
@@ -131,15 +128,6 @@ def train_mnist(config):
 # __lightning_end__
 
 
-# __tune_callback_begin__
-class TuneReportCallback(Callback):
-    def on_validation_end(self, trainer, pl_module):
-        tune.report(
-            loss=trainer.callback_metrics["avg_val_loss"].item(),
-            mean_accuracy=trainer.callback_metrics["avg_val_accuracy"].item())
-# __tune_callback_end__
-
-
 # __tune_train_begin__
 def train_mnist_tune(config, data_dir=None, num_epochs=10, num_gpus=0):
     model = LightningMNISTClassifier(config, data_dir)
@@ -149,35 +137,39 @@ def train_mnist_tune(config, data_dir=None, num_epochs=10, num_gpus=0):
         logger=TensorBoardLogger(
             save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
-        callbacks=[TuneReportCallback()])
-
+        callbacks=[
+            TuneReportCallback(
+                {
+                    "loss": "ptl/val_loss",
+                    "mean_accuracy": "ptl/val_accuracy"
+                },
+                on="validation_end")
+        ])
     trainer.fit(model)
 # __tune_train_end__
 
 
-# __tune_checkpoint_callback_begin__
-class CheckpointCallback(Callback):
-    def on_validation_end(self, trainer, pl_module):
-        with tune.checkpoint_dir(step=trainer.global_step) as checkpoint_dir:
-            trainer.save_checkpoint(os.path.join(checkpoint_dir, "checkpoint"))
-# __tune_checkpoint_callback_end__
-
-
 # __tune_train_checkpoint_begin__
-def train_mnist_tune_checkpoint(
-    config,
-    checkpoint_dir=None,
-    data_dir=None,
-    num_epochs=10,
-    num_gpus=0):
+def train_mnist_tune_checkpoint(config,
+                                checkpoint_dir=None,
+                                data_dir=None,
+                                num_epochs=10,
+                                num_gpus=0):
     trainer = pl.Trainer(
         max_epochs=num_epochs,
         gpus=num_gpus,
         logger=TensorBoardLogger(
             save_dir=tune.get_trial_dir(), name="", version="."),
         progress_bar_refresh_rate=0,
-        callbacks=[CheckpointCallback(),
-                   TuneReportCallback()])
+        callbacks=[
+            TuneReportCheckpointCallback(
+                metrics={
+                    "loss": "ptl/val_loss",
+                    "mean_accuracy": "ptl/val_accuracy"
+                },
+                filename="checkpoint",
+                on="validation_end")
+        ])
     if checkpoint_dir:
         # Currently, this leads to errors:
         # model = LightningMNISTClassifier.load_from_checkpoint(
@@ -189,8 +181,7 @@ def train_mnist_tune_checkpoint(
         model = LightningMNISTClassifier._load_model_state(ckpt, config=config)
         trainer.current_epoch = ckpt["epoch"]
     else:
-        model = LightningMNISTClassifier(
-            config=config, data_dir=data_dir)
+        model = LightningMNISTClassifier(config=config, data_dir=data_dir)
 
     trainer.fit(model)
 # __tune_train_checkpoint_end__
@@ -225,7 +216,10 @@ def tune_mnist_asha(num_samples=10, num_epochs=10, gpus_per_trial=0):
             data_dir=data_dir,
             num_epochs=num_epochs,
             num_gpus=gpus_per_trial),
-        resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
+        resources_per_trial={
+            "cpu": 1,
+            "gpu": gpus_per_trial
+        },
         config=config,
         num_samples=num_samples,
         scheduler=scheduler,
@@ -268,7 +262,10 @@ def tune_mnist_pbt(num_samples=10, num_epochs=10, gpus_per_trial=0):
             data_dir=data_dir,
             num_epochs=num_epochs,
             num_gpus=gpus_per_trial),
-        resources_per_trial={"cpu": 1, "gpu": gpus_per_trial},
+        resources_per_trial={
+            "cpu": 1,
+            "gpu": gpus_per_trial
+        },
         config=config,
         num_samples=num_samples,
         scheduler=scheduler,

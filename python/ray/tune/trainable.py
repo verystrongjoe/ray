@@ -24,7 +24,7 @@ from ray.tune.logger import UnifiedLogger
 from ray.tune.result import (
     DEFAULT_RESULTS_DIR, TIME_THIS_ITER_S, TIMESTEPS_THIS_ITER, DONE,
     TIMESTEPS_TOTAL, EPISODES_THIS_ITER, EPISODES_TOTAL, TRAINING_ITERATION,
-    RESULT_DUPLICATE, TRIAL_INFO, STDOUT_FILE, STDERR_FILE, LOGDIR_PATH)
+    RESULT_DUPLICATE, TRIAL_INFO, STDOUT_FILE, STDERR_FILE)
 from ray.tune.utils import UtilMonitor
 
 logger = logging.getLogger(__name__)
@@ -224,9 +224,8 @@ class Trainable:
         self.config = config or {}
         trial_info = self.config.pop(TRIAL_INFO, None)
 
-        self._logger_creator = logger_creator
         self._result_logger = self._logdir = None
-        self._create_logger(self.config)
+        self._create_logger(self.config, logger_creator)
 
         self._stdout_context = self._stdout_fp = self._stdout_stream = None
         self._stderr_context = self._stderr_fp = self._stderr_stream = None
@@ -303,7 +302,7 @@ class Trainable:
             `done` (bool): training is terminated. Filled only if not provided.
 
             `time_this_iter_s` (float): Time in seconds this iteration
-            took to run. This may be overriden in order to override the
+            took to run. This may be overridden in order to override the
             system-computed time difference.
 
             `time_total_s` (float): Accumulated time in seconds for this
@@ -398,9 +397,9 @@ class Trainable:
 
         self.log_result(result)
 
-        if self._stdout_stream:
+        if self._stdout_context:
             self._stdout_stream.flush()
-        if self._stderr_stream:
+        if self._stderr_context:
             self._stderr_stream.flush()
 
         return result
@@ -535,22 +534,17 @@ class Trainable:
         export_dir = export_dir or self.logdir
         return self._export_model(export_formats, export_dir)
 
-    def reset(self, new_config, new_logdir):
+    def reset(self, new_config, logger_creator=None):
         """Resets trial for use with new config.
 
         Subclasses should override reset_config() to actually
         reset actor behavior for the new config."""
         self.config = new_config
 
-        logger_config = new_config.copy()
-        logger_config[LOGDIR_PATH] = new_logdir
-
-        self._logdir = new_logdir
-
         self._result_logger.flush()
         self._result_logger.close()
 
-        self._create_logger(logger_config)
+        self._create_logger(new_config.copy(), logger_creator)
 
         stdout_file = new_config.pop(STDOUT_FILE, None)
         stderr_file = new_config.pop(STDERR_FILE, None)
@@ -558,7 +552,22 @@ class Trainable:
         self._close_logfiles()
         self._open_logfiles(stdout_file, stderr_file)
 
-        return self.reset_config(new_config)
+        success = self.reset_config(new_config)
+        if not success:
+            return False
+
+        # Reset attributes. Will be overwritten by `restore` if a checkpoint
+        # is provided.
+        self._iteration = 0
+        self._time_total = 0.0
+        self._timesteps_total = None
+        self._episodes_total = None
+        self._time_since_restore = 0.0
+        self._timesteps_since_restore = 0
+        self._iterations_since_restore = 0
+        self._restored = False
+
+        return True
 
     def reset_config(self, new_config):
         """Resets configuration without restarting the trial.
@@ -576,10 +585,13 @@ class Trainable:
         """
         return False
 
-    def _create_logger(self, config):
-        """Create logger from logger creator"""
-        if self._logger_creator:
-            self._result_logger = self._logger_creator(config)
+    def _create_logger(self, config, logger_creator=None):
+        """Create logger from logger creator.
+
+        Sets _logdir and _result_logger.
+        """
+        if logger_creator:
+            self._result_logger = logger_creator(config)
             self._logdir = self._result_logger.logdir
         else:
             logdir_prefix = datetime.today().strftime("%Y-%m-%d_%H-%M-%S")
@@ -640,6 +652,9 @@ class Trainable:
         """
         self._result_logger.flush()
         self._result_logger.close()
+        if self._monitor.is_alive():
+            self._monitor.stop()
+            self._monitor.join()
         self.cleanup()
 
         self._close_logfiles()
@@ -727,7 +742,7 @@ class Trainable:
         """
         result = self._train()
 
-        if self._is_overriden("_train") and log_once("_train"):
+        if self._is_overridden("_train") and log_once("_train"):
             logger.warning(
                 "Trainable._train is deprecated and will be removed in "
                 "a future version of Ray. Override Trainable.step instead.")
@@ -778,7 +793,7 @@ class Trainable:
         """
         checkpoint = self._save(tmp_checkpoint_dir)
 
-        if self._is_overriden("_save") and log_once("_save"):
+        if self._is_overridden("_save") and log_once("_save"):
             logger.warning(
                 "Trainable._save is deprecated and will be removed in a "
                 "future version of Ray. Override "
@@ -836,7 +851,7 @@ class Trainable:
                 underneath the `checkpoint_dir` `save_checkpoint` is preserved.
         """
         self._restore(checkpoint)
-        if self._is_overriden("_restore") and log_once("_restore"):
+        if self._is_overridden("_restore") and log_once("_restore"):
             logger.warning(
                 "Trainable._restore is deprecated and will be removed in a "
                 "future version of Ray. Override Trainable.load_checkpoint "
@@ -859,7 +874,7 @@ class Trainable:
                 Copy of `self.config`.
         """
         self._setup(config)
-        if self._is_overriden("_setup") and log_once("_setup"):
+        if self._is_overridden("_setup") and log_once("_setup"):
             logger.warning(
                 "Trainable._setup is deprecated and will be removed in "
                 "a future version of Ray. Override Trainable.setup instead.")
@@ -884,7 +899,7 @@ class Trainable:
             result (dict): Training result returned by step().
         """
         self._log_result(result)
-        if self._is_overriden("_log_result") and log_once("_log_result"):
+        if self._is_overridden("_log_result") and log_once("_log_result"):
             logger.warning(
                 "Trainable._log_result is deprecated and will be removed in "
                 "a future version of Ray. Override "
@@ -911,7 +926,7 @@ class Trainable:
         .. versionadded:: 0.8.7
         """
         self._stop()
-        if self._is_overriden("_stop") and log_once("trainable.cleanup"):
+        if self._is_overridden("_stop") and log_once("trainable.cleanup"):
             logger.warning(
                 "Trainable._stop is deprecated and will be removed in "
                 "a future version of Ray. Override Trainable.cleanup instead.")
@@ -935,5 +950,5 @@ class Trainable:
         """
         return {}
 
-    def _is_overriden(self, key):
+    def _is_overridden(self, key):
         return getattr(self, key).__code__ != getattr(Trainable, key).__code__

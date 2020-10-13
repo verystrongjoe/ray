@@ -20,6 +20,7 @@
 #include "ray/common/id.h"
 #include "ray/common/task/task_execution_spec.h"
 #include "ray/common/task/task_spec.h"
+#include "ray/gcs/gcs_server/gcs_node_manager.h"
 #include "ray/gcs/gcs_server/gcs_placement_group_scheduler.h"
 #include "ray/gcs/gcs_server/gcs_table_storage.h"
 #include "ray/gcs/pubsub/gcs_pub_sub.h"
@@ -57,24 +58,32 @@ class GcsPlacementGroup {
   /// Get the immutable PlacementGroupTableData of this placement group.
   const rpc::PlacementGroupTableData &GetPlacementGroupTableData();
 
+  /// Get the mutable bundle of this placement group.
+  rpc::Bundle *GetMutableBundle(int bundle_index);
+
   /// Update the state of this placement_group.
   void UpdateState(rpc::PlacementGroupTableData::PlacementGroupState state);
+
   /// Get the state of this gcs placement_group.
   rpc::PlacementGroupTableData::PlacementGroupState GetState() const;
 
   /// Get the id of this placement_group.
   PlacementGroupID GetPlacementGroupID() const;
+
   /// Get the name of this placement_group.
   std::string GetName() const;
 
-  /// Get the bundles of this placement_group
+  /// Get the bundles of this placement_group (including unplaced).
   std::vector<std::shared_ptr<BundleSpecification>> GetBundles() const;
+
+  /// Get the unplaced bundles of this placement group.
+  std::vector<std::shared_ptr<BundleSpecification>> GetUnplacedBundles() const;
 
   /// Get the Strategy
   rpc::PlacementStrategy GetStrategy() const;
 
   // Get debug string for the placement group.
-  const std::string DebugString() const;
+  std::string DebugString() const;
 
  private:
   /// The placement_group meta data which contains the task specification as well as the
@@ -99,10 +108,12 @@ class GcsPlacementGroupManager : public rpc::PlacementGroupInfoHandler {
   /// \param io_context The event loop to run the monitor on.
   /// \param scheduler Used to schedule placement group creation tasks.
   /// \param gcs_table_storage Used to flush placement group data to storage.
+  /// \param gcs_node_manager Reference of GcsNodeManager.
   explicit GcsPlacementGroupManager(
       boost::asio::io_context &io_context,
       std::shared_ptr<GcsPlacementGroupSchedulerInterface> scheduler,
-      std::shared_ptr<gcs::GcsTableStorage> gcs_table_storage);
+      std::shared_ptr<gcs::GcsTableStorage> gcs_table_storage,
+      GcsNodeManager &gcs_node_manager);
 
   ~GcsPlacementGroupManager() = default;
 
@@ -120,16 +131,15 @@ class GcsPlacementGroupManager : public rpc::PlacementGroupInfoHandler {
 
   /// Register placement_group asynchronously.
   ///
-  /// \param request Contains the meta info to create the placement_group.
+  /// \param placement_group The placement group to be created.
   /// \param callback Will be invoked after the placement_group is created successfully or
   /// be invoked immediately if the placement_group is already registered to
   /// `registered_placement_groups_` and its state is `CREATED`. The callback will not be
   /// called in this case.
-  void RegisterPlacementGroup(const rpc::CreatePlacementGroupRequest &request,
+  void RegisterPlacementGroup(const std::shared_ptr<GcsPlacementGroup> &placement_group,
                               StatusCallback callback);
 
   /// Schedule placement_groups in the `pending_placement_groups_` queue.
-  /// This function is exposed for testing only.
   void SchedulePendingPlacementGroups();
 
   /// Get the placement_group ID for the named placement_group. Returns nil if the
@@ -156,6 +166,12 @@ class GcsPlacementGroupManager : public rpc::PlacementGroupInfoHandler {
   void RemovePlacementGroup(const PlacementGroupID &placement_group_id,
                             StatusCallback on_placement_group_removed);
 
+  /// Handle a node death. This will reschedule all bundles associated with the
+  /// specified node id.
+  ///
+  /// \param node_id The specified node id.
+  void OnNodeDead(const NodeID &node_id);
+
  private:
   /// Try to create placement group after a short time.
   void RetryCreatingPlacementGroup();
@@ -178,6 +194,12 @@ class GcsPlacementGroupManager : public rpc::PlacementGroupInfoHandler {
     return scheduling_in_progress_id_ != PlacementGroupID::Nil();
   }
 
+  // Method that is invoked every second.
+  void Tick() const;
+
+  // Update placement group load information so that the autoscaler can use it.
+  void UpdatePlacementGroupLoad() const;
+
   /// The io loop that is used to delay execution of tasks (e.g.,
   /// execute_after).
   boost::asio::io_context &io_context_;
@@ -192,6 +214,9 @@ class GcsPlacementGroupManager : public rpc::PlacementGroupInfoHandler {
 
   /// The pending placement_groups which will not be scheduled until there's a resource
   /// change.
+  /// NOTE: When we remove placement group, we need to look for
+  /// `pending_placement_groups_` and delete the specific placement group, so we can't use
+  /// `std::priority_queue`.
   std::deque<std::shared_ptr<GcsPlacementGroup>> pending_placement_groups_;
 
   /// The scheduler to schedule all registered placement_groups.
@@ -205,6 +230,9 @@ class GcsPlacementGroupManager : public rpc::PlacementGroupInfoHandler {
   /// TODO(sang): Currently, only one placement group can be scheduled at a time.
   /// We should probably support concurrenet creation (or batching).
   PlacementGroupID scheduling_in_progress_id_ = PlacementGroupID::Nil();
+
+  /// Reference of GcsNodeManager.
+  const GcsNodeManager &gcs_node_manager_;
 };
 
 }  // namespace gcs

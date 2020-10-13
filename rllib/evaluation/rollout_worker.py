@@ -131,7 +131,10 @@ class RolloutWorker(ParallelIteratorWorker):
     @DeveloperAPI
     def __init__(
             self,
+            *,
             env_creator: Callable[[EnvContext], EnvType],
+            validate_env: Optional[Callable[[EnvType, EnvContext],
+                                            None]] = None,
             policy: Union[type, Dict[str, Tuple[Optional[
                 type], gym.Space, gym.Space, PartialTrainerConfigDict]]],
             policy_mapping_fn: Callable[[AgentID], PolicyID] = None,
@@ -175,6 +178,9 @@ class RolloutWorker(ParallelIteratorWorker):
         Args:
             env_creator (Callable[[EnvContext], EnvType]): Function that
                 returns a gym.Env given an EnvContext wrapped configuration.
+            validate_env (Optional[Callable[[EnvType, EnvContext], None]]):
+                Optional callable to validate the generated environment (only
+                on worker=0).
             policy (Union[type, Dict[str, Tuple[Optional[type], gym.Space,
                 gym.Space, PartialTrainerConfigDict]]]): Either a Policy class
                 or a dict of policy id strings to
@@ -291,7 +297,6 @@ class RolloutWorker(ParallelIteratorWorker):
 
         policy_config: TrainerConfigDict = policy_config or {}
         if (tf1 and policy_config.get("framework") in ["tf2", "tfe"]
-                and not policy_config.get("no_eager_on_workers")
                 # This eager check is necessary for certain all-framework tests
                 # that use tf's eager_mode() context generator.
                 and not tf1.executing_eagerly()):
@@ -330,6 +335,9 @@ class RolloutWorker(ParallelIteratorWorker):
         self.fake_sampler: bool = fake_sampler
 
         self.env = _validate_env(env_creator(env_context))
+        if validate_env is not None:
+            validate_env(self.env, self.env_context)
+
         if isinstance(self.env, (BaseEnv, MultiAgentEnv)):
 
             def wrap(env):
@@ -339,7 +347,7 @@ class RolloutWorker(ParallelIteratorWorker):
                 not model_config.get("custom_preprocessor") and \
                 preprocessor_pref == "deepmind":
 
-            # Deepmind wrappers already handle all preprocessing
+            # Deepmind wrappers already handle all preprocessing.
             self.preprocessing_enabled = False
 
             # If clip_rewards not explicitly set to False, switch it
@@ -388,9 +396,10 @@ class RolloutWorker(ParallelIteratorWorker):
             np.random.seed(seed)
             random.seed(seed)
             if not hasattr(self.env, "seed"):
-                raise ValueError("Env doesn't support env.seed(): {}".format(
+                logger.info("Env doesn't support env.seed(): {}".format(
                     self.env))
-            self.env.seed(seed)
+            else:
+                self.env.seed(seed)
             try:
                 assert torch is not None
                 torch.manual_seed(seed)
@@ -420,7 +429,7 @@ class RolloutWorker(ParallelIteratorWorker):
         if (ray.is_initialized()
                 and ray.worker._mode() != ray.worker.LOCAL_MODE):
             # Check available number of GPUs
-            if not ray.get_gpu_ids(as_str=True):
+            if not ray.get_gpu_ids():
                 logger.debug("Creating policy evaluation worker {}".format(
                     worker_index) +
                              " on CPU (please ignore any CUDA init errors)")
@@ -515,7 +524,7 @@ class RolloutWorker(ParallelIteratorWorker):
                 rollout_fragment_length=rollout_fragment_length,
                 callbacks=self.callbacks,
                 horizon=episode_horizon,
-                pack_multiple_episodes_in_batch=pack,
+                multiple_episodes_in_batch=pack,
                 tf_sess=self.tf_sess,
                 clip_actions=clip_actions,
                 blackhole_outputs="simulation" in input_evaluation,
@@ -538,7 +547,7 @@ class RolloutWorker(ParallelIteratorWorker):
                 rollout_fragment_length=rollout_fragment_length,
                 callbacks=self.callbacks,
                 horizon=episode_horizon,
-                pack_multiple_episodes_in_batch=pack,
+                multiple_episodes_in_batch=pack,
                 tf_sess=self.tf_sess,
                 clip_actions=clip_actions,
                 soft_horizon=soft_horizon,
@@ -619,7 +628,7 @@ class RolloutWorker(ParallelIteratorWorker):
         return batch
 
     @DeveloperAPI
-    @ray.method(num_return_vals=2)
+    @ray.method(num_returns=2)
     def sample_with_count(self) -> Tuple[SampleBatchType, int]:
         """Same as sample() but returns the count as a separate future."""
         batch = self.sample()
@@ -782,7 +791,7 @@ class RolloutWorker(ParallelIteratorWorker):
 
         This is typically used in combination with distributed allreduce.
 
-        Arguments:
+        Args:
             expected_batch_size (int): Expected number of samples to learn on.
             num_sgd_iter (int): Number of SGD iterations.
             sgd_minibatch_size (int): SGD minibatch size.
@@ -827,7 +836,7 @@ class RolloutWorker(ParallelIteratorWorker):
             self, policy_id: Optional[PolicyID] = DEFAULT_POLICY_ID) -> Policy:
         """Return policy for the specified id, or None.
 
-        Arguments:
+        Args:
             policy_id (str): id of policy to return.
         """
 
@@ -1033,7 +1042,7 @@ class RolloutWorker(ParallelIteratorWorker):
 
     def get_node_ip(self) -> str:
         """Returns the IP address of the current node."""
-        return ray.services.get_node_ip_address()
+        return ray._private.services.get_node_ip_address()
 
     def find_free_port(self) -> int:
         """Finds a free port on the current node."""
@@ -1093,7 +1102,7 @@ def _validate_multiagent_config(policy: MultiAgentPolicyConfigDict,
 
 
 def _validate_env(env: Any) -> EnvType:
-    # allow this as a special case (assumed gym.Env)
+    # Allow this as a special case (assumed gym.Env).
     if hasattr(env, "observation_space") and hasattr(env, "action_space"):
         return env
 

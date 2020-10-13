@@ -323,7 +323,7 @@ def experiment():
             "training_iteration": TRAINING_ITERATION,
         },
         num_samples=NUM_WORKERS,
-        resources_per_trial={"cpu": 10, "gpu": 0.25},
+        # resources_per_trial={"cpu": 10, "gpu": 0.25},
         # PBT starts by training many neural networks in parallel with random hyperparameters.
         config={
             "epochs": 1,
@@ -333,6 +333,7 @@ def experiment():
             "decay": sample_from(lambda spec: spec.config.lr / 100.0),
             # "dropout": grid_search([0.25, 0.5]),
             "dropout": 0.5,
+            "num_gpus":0.25,
         })
 
     # Plot by wall-clock time

@@ -82,8 +82,8 @@ raylet::RayletClient::RayletClient(
     std::shared_ptr<ray::rpc::NodeManagerWorkerClient> grpc_client,
     const std::string &raylet_socket, const WorkerID &worker_id,
     rpc::WorkerType worker_type, const JobID &job_id, const Language &language,
-    const std::string &ip_address, ClientID *raylet_id, int *port,
-    std::unordered_map<std::string, std::string> *internal_config,
+    const std::string &ip_address, Status *status, NodeID *raylet_id, int *port,
+    std::unordered_map<std::string, std::string> *system_config,
     const std::string &job_config)
     : grpc_client_(std::move(grpc_client)),
       worker_id_(worker_id),
@@ -103,19 +103,32 @@ raylet::RayletClient::RayletClient(
   // Register the process ID with the raylet.
   // NOTE(swang): If raylet exits and we are registered as a worker, we will get killed.
   std::vector<uint8_t> reply;
-  auto status = conn_->AtomicRequestReply(MessageType::RegisterClientRequest,
-                                          MessageType::RegisterClientReply, &reply, &fbb);
-  RAY_CHECK_OK_PREPEND(status, "[RayletClient] Unable to register worker with raylet.");
+  auto request_status = conn_->AtomicRequestReply(
+      MessageType::RegisterClientRequest, MessageType::RegisterClientReply, &reply, &fbb);
+  if (!request_status.ok()) {
+    *status =
+        Status(request_status.code(),
+               std::string("[RayletClient] Unable to register worker with raylet. ") +
+                   request_status.message());
+    return;
+  }
   auto reply_message = flatbuffers::GetRoot<protocol::RegisterClientReply>(reply.data());
-  *raylet_id = ClientID::FromBinary(reply_message->raylet_id()->str());
+  bool success = reply_message->success();
+  if (success) {
+    *status = Status::OK();
+  } else {
+    *status = Status::Invalid(string_from_flatbuf(*reply_message->failure_reason()));
+    return;
+  }
+  *raylet_id = NodeID::FromBinary(reply_message->raylet_id()->str());
   *port = reply_message->port();
 
-  RAY_CHECK(internal_config);
-  auto keys = reply_message->internal_config_keys();
-  auto values = reply_message->internal_config_values();
+  RAY_CHECK(system_config);
+  auto keys = reply_message->system_config_keys();
+  auto values = reply_message->system_config_values();
   RAY_CHECK(keys->size() == values->size());
   for (size_t i = 0; i < keys->size(); i++) {
-    internal_config->emplace(keys->Get(i)->str(), values->Get(i)->str());
+    system_config->emplace(keys->Get(i)->str(), values->Get(i)->str());
   }
 }
 
@@ -293,8 +306,7 @@ Status raylet::RayletClient::NotifyActorResumedFromCheckpoint(
 }
 
 Status raylet::RayletClient::SetResource(const std::string &resource_name,
-                                         const double capacity,
-                                         const ClientID &client_Id) {
+                                         const double capacity, const NodeID &client_Id) {
   flatbuffers::FlatBufferBuilder fbb;
   auto message = protocol::CreateSetResourceRequest(fbb, fbb.CreateString(resource_name),
                                                     capacity, to_flatbuf(fbb, client_Id));
@@ -304,42 +316,21 @@ Status raylet::RayletClient::SetResource(const std::string &resource_name,
 
 void raylet::RayletClient::RequestWorkerLease(
     const TaskSpecification &resource_spec,
-    const rpc::ClientCallback<rpc::RequestWorkerLeaseReply> &callback) {
+    const rpc::ClientCallback<rpc::RequestWorkerLeaseReply> &callback,
+    const int64_t backlog_size) {
   rpc::RequestWorkerLeaseRequest request;
   request.mutable_resource_spec()->CopyFrom(resource_spec.GetMessage());
+  request.set_backlog_size(backlog_size);
   grpc_client_->RequestWorkerLease(request, callback);
 }
 
 /// Spill objects to external storage.
-/// \param object_ids The IDs of objects to be spilled.
-Status raylet::RayletClient::ForceSpillObjects(const std::vector<ObjectID> &object_ids) {
-  flatbuffers::FlatBufferBuilder fbb;
-  auto message =
-      protocol::CreateForceSpillObjectsRequest(fbb, to_flatbuf(fbb, object_ids));
-  fbb.Finish(message);
-  std::vector<uint8_t> reply;
-  RAY_RETURN_NOT_OK(conn_->AtomicRequestReply(MessageType::ForceSpillObjectsRequest,
-                                              MessageType::ForceSpillObjectsReply, &reply,
-                                              &fbb));
-  RAY_UNUSED(flatbuffers::GetRoot<protocol::ForceSpillObjectsReply>(reply.data()));
-  return Status::OK();
-}
-
-/// Restore spilled objects from external storage.
-/// \param object_ids The IDs of objects to be restored.
-Status raylet::RayletClient::ForceRestoreSpilledObjects(
-    const std::vector<ObjectID> &object_ids) {
-  flatbuffers::FlatBufferBuilder fbb;
-  auto message =
-      protocol::CreateForceRestoreSpilledObjectsRequest(fbb, to_flatbuf(fbb, object_ids));
-  fbb.Finish(message);
-  std::vector<uint8_t> reply;
-  RAY_RETURN_NOT_OK(conn_->AtomicRequestReply(
-      MessageType::ForceRestoreSpilledObjectsRequest,
-      MessageType::ForceRestoreSpilledObjectsReply, &reply, &fbb));
-  RAY_UNUSED(
-      flatbuffers::GetRoot<protocol::ForceRestoreSpilledObjectsReply>(reply.data()));
-  return Status::OK();
+void raylet::RayletClient::RequestObjectSpillage(
+    const ObjectID &object_id,
+    const rpc::ClientCallback<rpc::RequestObjectSpillageReply> &callback) {
+  rpc::RequestObjectSpillageRequest request;
+  request.set_object_id(object_id.Binary());
+  grpc_client_->RequestObjectSpillage(request, callback);
 }
 
 Status raylet::RayletClient::ReturnWorker(int worker_port, const WorkerID &worker_id,
@@ -384,12 +375,20 @@ void raylet::RayletClient::CancelWorkerLease(
   grpc_client_->CancelWorkerLease(request, callback);
 }
 
-void raylet::RayletClient::RequestResourceReserve(
+void raylet::RayletClient::PrepareBundleResources(
     const BundleSpecification &bundle_spec,
-    const ray::rpc::ClientCallback<ray::rpc::RequestResourceReserveReply> &callback) {
-  rpc::RequestResourceReserveRequest request;
+    const ray::rpc::ClientCallback<ray::rpc::PrepareBundleResourcesReply> &callback) {
+  rpc::PrepareBundleResourcesRequest request;
   request.mutable_bundle_spec()->CopyFrom(bundle_spec.GetMessage());
-  grpc_client_->RequestResourceReserve(request, callback);
+  grpc_client_->PrepareBundleResources(request, callback);
+}
+
+void raylet::RayletClient::CommitBundleResources(
+    const BundleSpecification &bundle_spec,
+    const ray::rpc::ClientCallback<ray::rpc::CommitBundleResourcesReply> &callback) {
+  rpc::CommitBundleResourcesRequest request;
+  request.mutable_bundle_spec()->CopyFrom(bundle_spec.GetMessage());
+  grpc_client_->CommitBundleResources(request, callback);
 }
 
 void raylet::RayletClient::CancelResourceReserve(

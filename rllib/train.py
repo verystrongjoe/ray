@@ -10,7 +10,8 @@ from ray.cluster_utils import Cluster
 from ray.tune.config_parser import make_parser
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.tune.resources import resources_to_json
-from ray.tune.tune import _make_scheduler, run_experiments
+from ray.tune.tune import run_experiments
+from ray.tune.schedulers import create_scheduler
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 
 # Try to import both backends for flag checking/warnings.
@@ -69,16 +70,6 @@ def create_parser(parser_creator=None):
         default=None,
         type=int,
         help="Emulate multiple cluster nodes for debugging.")
-    parser.add_argument(
-        "--ray-redis-max-memory",
-        default=None,
-        type=int,
-        help="--redis-max-memory to use if starting a new cluster.")
-    parser.add_argument(
-        "--ray-memory",
-        default=None,
-        type=int,
-        help="--memory to use if starting a new cluster.")
     parser.add_argument(
         "--ray-object-store-memory",
         default=None,
@@ -204,26 +195,22 @@ def run(args, parser):
             cluster.add_node(
                 num_cpus=args.ray_num_cpus or 1,
                 num_gpus=args.ray_num_gpus or 0,
-                object_store_memory=args.ray_object_store_memory,
-                memory=args.ray_memory,
-                redis_max_memory=args.ray_redis_max_memory)
+                object_store_memory=args.ray_object_store_memory)
         ray.init(address=cluster.address)
     else:
         ray.init(
             include_dashboard=not args.no_ray_ui,
             address=args.ray_address,
             object_store_memory=args.ray_object_store_memory,
-            memory=args.ray_memory,
-            redis_max_memory=args.ray_redis_max_memory,
             num_cpus=args.ray_num_cpus,
             num_gpus=args.ray_num_gpus,
             local_mode=args.local_mode)
 
     run_experiments(
         experiments,
-        scheduler=_make_scheduler(args),
-        queue_trials=args.queue_trials,
+        scheduler=create_scheduler(args.scheduler, **args.scheduler_config),
         resume=args.resume,
+        queue_trials=args.queue_trials,
         verbose=verbose,
         concurrent=True)
 

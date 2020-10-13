@@ -24,27 +24,21 @@ for i in range(num_nodes):
         redis_max_memory=redis_max_memory,
         dashboard_host="0.0.0.0")
 
-print("Downloading load testing tool")
-subprocess.call([
-    "bash", "-c", "rm hey_linux_amd64 || true;"
-    "wget https://storage.googleapis.com/hey-release/hey_linux_amd64;"
-    "chmod +x hey_linux_amd64"
-])
-
 ray.init(address=cluster.address, dashboard_host="0.0.0.0")
-serve.init()
+client = serve.start()
 
 
 @serve.accept_batch
 def echo(_):
     time.sleep(0.01)  # Sleep for 10ms
-    ray.show_in_webui(str(serve.context.batch_size), key="Current batch size")
+    ray.show_in_dashboard(
+        str(serve.context.batch_size), key="Current batch size")
     return ["hi {}".format(i) for i in range(serve.context.batch_size)]
 
 
 config = {"num_replicas": 30, "max_batch_size": 16}
-serve.create_backend("echo:v1", echo, config=config)
-serve.create_endpoint("echo", backend="echo:v1", route="/echo")
+client.create_backend("echo:v1", echo, config=config)
+client.create_endpoint("echo", backend="echo:v1", route="/echo")
 
 print("Warming up")
 for _ in range(5):
@@ -53,12 +47,15 @@ for _ in range(5):
     time.sleep(0.5)
 
 connections = int(config["num_replicas"] * config["max_batch_size"] * 0.75)
+num_threads = 2
+time_to_run = "60m"
 
 while True:
     proc = subprocess.Popen(
         [
-            "./hey_linux_amd64", "-c",
-            str(connections), "-z", "60m", "http://127.0.0.1:8000/echo"
+            "wrk", "-c",
+            str(connections), "-t",
+            str(num_threads), "-s", time_to_run, "http://127.0.0.1:8000/echo"
         ],
         stdout=PIPE,
         stderr=PIPE)

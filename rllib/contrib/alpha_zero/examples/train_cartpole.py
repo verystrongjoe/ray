@@ -45,5 +45,7 @@ if __name__ == "__main__":
             "model": {
                 "custom_model": "dense_model",
             },
+            # "num_gpus": 1,
         },
+        # resources_per_trial={'cpu': 1, 'gpu': 1},
     )

@@ -22,13 +22,14 @@
 # (problems: 10min timeout, not respecting ray/ci/keep_alive.sh, or even
 # `travis_wait n`, etc..).
 
-# Our travis.yml file executes all these tests in 6 different jobs, which are:
+# Our travis.yml file executes all these tests in 7 different jobs, which are:
 # 1) everything in a) using tf2.x
 # 2) everything in a) using tf1.x
-# 3) everything in b) c) d) and e)
-# 4) everything in g)
-# 5) f), BUT only those tagged `tests_dir_A` to `tests_dir_L`
-# 6) f), BUT only those tagged `tests_dir_M` to `tests_dir_Z`
+# 3) everything in a) using torch
+# 4) everything in b) c) d) and e)
+# 5) everything in g)
+# 6) f), BUT only those tagged `tests_dir_A` to `tests_dir_[some letter]`
+# 7) f), BUT only those tagged `tests_dir_[some letter]` to `tests_dir_Z`
 
 
 # --------------------------------------------------------------------
@@ -220,6 +221,18 @@ py_test(
     data = ["tuned_examples/impala/cartpole-impala.yaml"],
     args = ["--yaml-dir=tuned_examples/impala", "--torch"]
 )
+
+# Working, but takes a long time to learn (>15min).
+## MB-MPO
+#py_test(
+#    name = "run_regression_tests_pendulum_mbmpo_torch",
+#    main = "tests/run_regression_tests.py",
+#    tags = ["learning_tests_torch", "learning_tests_pendulum"],
+#    size = "large",
+#    srcs = ["tests/run_regression_tests.py"],
+#    data = ["tuned_examples/mbmpo/pendulum-mbmpo.yaml"],
+#    args = ["--torch", "--yaml-dir=tuned_examples/mbmpo"]
+#)
 
 # PG
 py_test(
@@ -435,14 +448,6 @@ py_test(
     srcs = ["agents/dqn/tests/test_simple_q.py"]
 )
 
-# DYNATrainer
-py_test(
-    name = "test_dyna",
-    tags = ["agents_dir"],
-    size = "medium",
-    srcs = ["agents/dyna/tests/test_dyna.py"]
-)
-
 # ES
 py_test(
     name = "test_es",
@@ -475,12 +480,30 @@ py_test(
     srcs = ["agents/marwil/tests/test_marwil.py"]
 )
 
+# BCTrainer (sub-type of MARWIL)
+py_test(
+    name = "test_bc",
+    tags = ["agents_dir"],
+    size = "medium",
+    # Include the json data file.
+    data = ["tests/data/cartpole/large.json"],
+    srcs = ["agents/marwil/tests/test_bc.py"]
+)
+
 # MAMLTrainer
 py_test(
     name = "test_maml",
     tags = ["agents_dir"],
     size = "medium",
     srcs = ["agents/maml/tests/test_maml.py"]
+)
+
+# MBMPOTrainer
+py_test(
+    name = "test_mbmpo",
+    tags = ["agents_dir"],
+    size = "medium",
+    srcs = ["agents/mbmpo/tests/test_mbmpo.py"]
 )
 
 # PGTrainer
@@ -1003,6 +1026,13 @@ sh_test(
     data = glob(["examples/serving/*.py"]),
 )
 
+py_test(
+    name = "env/wrappers/tests/test_recsim_wrapper",
+    tags = ["env"],
+    size = "small",
+    srcs = ["env/wrappers/tests/test_recsim_wrapper.py"]
+)
+
 # --------------------------------------------------------------------
 # Models and Distributions
 # rllib/models/
@@ -1011,18 +1041,41 @@ sh_test(
 # --------------------------------------------------------------------
 
 py_test(
+    name = "test_attention_nets",
+    tags = ["models"],
+    size = "small",
+    srcs = ["models/tests/test_attention_nets.py"]
+)
+
+py_test(
+    name = "test_convtranspose2d_stack",
+    tags = ["models"],
+    size = "small",
+    data = glob(["tests/data/images/obstacle_tower.png"]),
+    srcs = ["models/tests/test_convtranspose2d_stack.py"]
+)
+
+py_test(
     name = "test_distributions",
     tags = ["models"],
     size = "medium",
     srcs = ["models/tests/test_distributions.py"]
 )
 
-py_test(
-    name = "test_attention_nets",
-    tags = ["models"],
-    size = "small",
-    srcs = ["models/tests/test_attention_nets.py"]
-)
+# --------------------------------------------------------------------
+# Evaluation components
+# rllib/evaluation/
+#
+# Tag: evaluation
+# --------------------------------------------------------------------
+# mysteriously times out on travis.
+#py_test(
+#    name = "evaluation/tests/test_trajectory_view_api",
+#    tags = ["evaluation"],
+#    size = "medium",
+#    srcs = ["evaluation/tests/test_trajectory_view_api.py"]
+#)
+
 
 # --------------------------------------------------------------------
 # Optimizers and Memories
@@ -1059,19 +1112,19 @@ py_test(
     srcs = ["policy/tests/test_compute_log_likelihoods.py"]
 )
 
-py_test(
-    name = "policy/tests/test_trajectory_view_api",
-    tags = ["policy"],
-    size = "small",
-    srcs = ["policy/tests/test_trajectory_view_api.py"]
-)
-
 # --------------------------------------------------------------------
 # Utils:
 # rllib/utils/
 #
 # Tag: utils
 # --------------------------------------------------------------------
+
+py_test(
+    name = "test_curiosity",
+    tags = ["utils"],
+    size = "large",
+    srcs = ["utils/exploration/tests/test_curiosity.py"]
+)
 
 py_test(
     name = "test_explorations",
@@ -1376,6 +1429,13 @@ py_test(
     size = "large",
     srcs = ["tests/test_supported_spaces.py"],
     args = ["TestSupportedSpacesEvolutionAlgos"]
+)
+
+py_test(
+    name = "tests/test_timesteps",
+    tags = ["tests_dir", "tests_dir_T"],
+    size = "small",
+    srcs = ["tests/test_timesteps.py"]
 )
 
 # --------------------------------------------------------------------

@@ -8,6 +8,7 @@ set -euo pipefail
 FLAKE8_VERSION_REQUIRED="3.7.7"
 YAPF_VERSION_REQUIRED="0.23.0"
 SHELLCHECK_VERSION_REQUIRED="0.7.1"
+MYPY_VERSION_REQUIRED="0.782"
 
 check_command_exist() {
     VERSION=""
@@ -21,6 +22,9 @@ check_command_exist() {
         shellcheck)
             VERSION=$SHELLCHECK_VERSION_REQUIRED
             ;;
+        mypy)
+            VERSION=$MYPY_VERSION_REQUIRED
+            ;;
         *)
             echo "$1 is not a required dependency"
             exit 1
@@ -33,6 +37,7 @@ check_command_exist() {
 
 check_command_exist yapf
 check_command_exist flake8
+check_command_exist mypy
 
 ver=$(yapf --version)
 if ! echo "$ver" | grep -q 0.23.0; then
@@ -46,9 +51,10 @@ builtin cd "$(dirname "${BASH_SOURCE:-$0}")"
 ROOT="$(git rev-parse --show-toplevel)"
 builtin cd "$ROOT" || exit 1
 
-FLAKE8_VERSION=$(flake8 --version | awk '{print $1}')
+FLAKE8_VERSION=$(flake8 --version | head -n 1 | awk '{print $1}')
 YAPF_VERSION=$(yapf --version | awk '{print $2}')
 SHELLCHECK_VERSION=$(shellcheck --version | awk '/^version:/ {print $2}')
+MYPY_VERSION=$(mypy --version | awk '{print $2}')
 
 # params: tool name, tool version, required version
 tool_version_check() {
@@ -60,6 +66,7 @@ tool_version_check() {
 tool_version_check "flake8" "$FLAKE8_VERSION" "$FLAKE8_VERSION_REQUIRED"
 tool_version_check "yapf" "$YAPF_VERSION" "$YAPF_VERSION_REQUIRED"
 tool_version_check "shellcheck" "$SHELLCHECK_VERSION" "$SHELLCHECK_VERSION_REQUIRED"
+tool_version_check "mypy" "$MYPY_VERSION" "$MYPY_VERSION_REQUIRED"
 
 if which clang-format >/dev/null; then
   CLANG_FORMAT_VERSION=$(clang-format --version | awk '{print $3}')
@@ -78,14 +85,20 @@ SHELLCHECK_FLAGS=(
   --exclude=2207  # "Prefer mapfile or read -a to split command output (or quote to avoid splitting)." -- these aren't compatible with macOS's old Bash
 )
 
-SHELLCHECK_BAZEL_FLAGS=(
-  --exclude=2043  # "This loop will only ever run once. Bad quoting or missing glob/expansion?" -- Bazel preprocessing can trigger this needlessly
-)
-
 YAPF_FLAGS=(
     '--style' "$ROOT/.style.yapf"
     '--recursive'
     '--parallel'
+)
+
+# TODO(dmitri): When more of the codebase is typed properly, the mypy flags
+# should be set to do a more stringent check. 
+MYPY_FLAGS=(
+    '--follow-imports=skip'
+)
+
+MYPY_FILES=(
+    'python/ray/autoscaler/node_provider.py'
 )
 
 YAPF_EXCLUDES=(
@@ -110,9 +123,15 @@ shellcheck_scripts() {
   shellcheck "${SHELLCHECK_FLAGS[@]}" "$@"
 }
 
-shellcheck_bazel() {
-  "${ROOT}"/ci/travis/bazel.py shellcheck "mnemonic(\"Genrule\", deps(//:*))" shellcheck "${SHELLCHECK_FLAGS[@]}" "${SHELLCHECK_BAZEL_FLAGS[@]}" "$@"
+# Runs mypy on each argument in sequence. This is different than running mypy 
+# once on the list of arguments.
+mypy_on_each() {
+    for file in "$@"; do
+       echo "Running mypy on $file"
+       mypy ${MYPY_FLAGS[@]+"${MYPY_FLAGS[@]}"} "$file"
+    done
 }
+
 
 # Format specified files
 format_files() {
@@ -147,15 +166,11 @@ format_files() {
 
     if [ 0 -lt "${#python_files[@]}" ]; then
       yapf --in-place "${YAPF_FLAGS[@]}" -- "${python_files[@]}"
+      echo "Running mypy on provided python files:"
+      mypy_on_each "${python_files[@]}" 
     fi
 
     if shellcheck --shell=sh --format=diff - < /dev/null; then
-      if [ 0 -lt "${#bazel_files[@]}" ]; then
-        if ! shellcheck_bazel; then
-          echo "Bazel genrule() scripts cannot be fixed automatically; please fix manually." 1>&2
-          shellcheck_bazel --format=diff
-        fi
-      fi
       if [ 0 -lt "${#shell_files[@]}" ]; then
         local difference
         difference="$(shellcheck_scripts --format=diff "${shell_files[@]}" || true && printf "-")"
@@ -168,6 +183,7 @@ format_files() {
 }
 
 # Format all files, and print the diff to stdout for travis.
+# Mypy is run only on files specified in the array MYPY_FILES.
 format_all() {
     command -v flake8 &> /dev/null;
     HAS_FLAKE8=$?
@@ -175,6 +191,8 @@ format_all() {
     echo "$(date)" "YAPF...."
     git ls-files -- '*.py' "${GIT_LS_EXCLUDES[@]}" | xargs -P 10 \
       yapf --in-place "${YAPF_EXCLUDES[@]}" "${YAPF_FLAGS[@]}"
+    echo "$(date)" "MYPY...."
+    mypy_on_each "${MYPY_FILES[@]}"
     if [ $HAS_FLAKE8 ]; then
       echo "$(date)" "Flake8...."
       git ls-files -- '*.py' "${GIT_LS_EXCLUDES[@]}" | xargs -P 5 \
@@ -190,9 +208,6 @@ format_all() {
     fi
 
     if command -v shellcheck >/dev/null; then
-      echo "$(date)" "shellcheck bazel...."
-      shellcheck_bazel
-
       local shell_files non_shell_files
       non_shell_files=($(git ls-files -- ':(exclude)*.sh'))
       shell_files=($(git ls-files -- '*.sh'))
@@ -242,10 +257,6 @@ format_changed() {
     fi
 
     if command -v shellcheck >/dev/null; then
-        if ! git diff --diff-filter=ACRM --quiet --exit-code "$MERGEBASE" -- 'WORKSPACE' 'WORKSPACE.*' 'BUILD.*' '*.bzl' '*.bazel' &>/dev/null; then
-            shellcheck_bazel
-        fi
-
         local shell_files non_shell_files
         non_shell_files=($(git diff --name-only --diff-filter=ACRM "$MERGEBASE" -- ':(exclude)*.sh'))
         shell_files=($(git diff --name-only --diff-filter=ACRM "$MERGEBASE" -- '*.sh'))
@@ -282,12 +293,12 @@ else
 fi
 
 # Ensure import ordering
-# Make sure that for every import psutil; import setpproctitle
+# Make sure that for every import psutil; import setproctitle
 # There's a import ray above it.
 
 PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE:-python}
 
-$PYTHON_EXECUTABLE ci/travis/check_import_order.py . -s ci -s python/ray/pyarrow_files -s python/ray/thirdparty_files -s python/build -s lib
+$PYTHON_EXECUTABLE ci/travis/check_import_order.py . -s ci -s python/ray/thirdparty_files -s python/build -s lib
 
 if ! git diff --quiet &>/dev/null; then
     echo 'Reformatted changed files. Please review and stage the changes.'
