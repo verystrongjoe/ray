@@ -34,7 +34,7 @@ import pickle
 import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=3)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=50)
 parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)

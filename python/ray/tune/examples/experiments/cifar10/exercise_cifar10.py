@@ -53,6 +53,8 @@ parser.add_argument("-perturbation_interval", "--perturbation_interval", type=in
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=1000)
 parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_201020')
+parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=1)
+
 
 args = parser.parse_args()
 print(f"args.n_experiments : {args.n_experiments}")
@@ -67,12 +69,13 @@ print(f"args.save_dir : {args.save_dir}")
 ############################################
 N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
-# N_EPISODE_STEP = 5
+N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
 N_PARAMS = 3
 K = int(math.pow(2, N_PARAMS))
 NUM_WORKERS = args.n_workers
 PERTUBATION_INTERVAL = args.perturbation_interval
+OPTIMAL_EXPLORATION = True
 
 IS_UCB = False
 if args.ucb:
@@ -379,22 +382,38 @@ if __name__ == '__main__':
 
     final_results = []
 
-    for u in [True, False]:
-        list_accuracy = []
-        for i in range(N_EXPERIMENTS):
-            K = int(math.pow(2, N_PARAMS))
-            IS_UCB = u
-            IDX = i
-            EXPERIMENT_NAME = f'pbt-cifar10-{IS_UCB}-{IDX}'
-            list_accuracy.append(experiment())
+    for optimal_exploration in [True, False]:
+        for n_episode_step in range(3, N_EPISODE_STEP+1):
 
-        ## Save pickle
-        with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-            pickle.dump(list_accuracy, fw)
-        print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-        print(f'average accuracy over {N_EXPERIMENTS} experiments ucb {u} : {np.average(list_accuracy)}')
-        final_results.append(np.average(list_accuracy))
 
-    print('============================final_result============================')
-    print('UCB True: ', final_results[0])
-    print('UCB False: ', final_results[1])
+            final_results = []
+
+            for u in [True, False]:
+                list_accuracy = []
+                for i in range(N_EXPERIMENTS):
+                    K = int(math.pow(2, N_PARAMS))
+                    IS_UCB = u
+                    IDX = i
+                    N_EPISODE_STEP = n_episode_step
+                    OPTIMAL_EXPLORATION = optimal_exploration
+                    EXPERIMENT_NAME = f'pbt-cifar10-{IS_UCB}-{IDX}'
+                    list_accuracy.append(experiment())
+
+                EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+                ## Save pickle
+                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                    pickle.dump(list_accuracy, fw)
+                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+                print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
+                final_results.append(np.average(list_accuracy))
+
+            EXPERIMENT_RESULT_NAME = f'pbt-cifar10-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+
+            print('============================final_result============================')
+            f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
+            print('UCB True: ', final_results[0])
+            print('UCB False: ', final_results[1])
+            f.write(f"'UCB True: ', {final_results[0]}\n")
+            f.write(f"'UCB False: ', {final_results[1]}\n")
+            f.close()
