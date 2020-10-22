@@ -221,7 +221,7 @@ def experiment():
                 lambda spec: random.choice([128, 512, 2048])),
             "train_batch_size": sample_from(
                 lambda spec: random.choice([10000, 20000, 40000])),
-            "num_gpus":0.25,
+            "num_gpus":0.5,
 
         })
 

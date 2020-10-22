@@ -1,11 +1,9 @@
 """
-
 https://towardsdatascience.com/deep-reinforcement-learning-and-hyperparameter-tuning-df9bf48e4bd2
 
 keras
 https://github.com/ray-project/ray/pull/1729/files
 """
-
 import tensorflow as tf
 try:
     tf.get_logger().setLevel('INFO')
@@ -13,6 +11,7 @@ except Exception as exc:
     print(exc)
 import warnings
 warnings.simplefilter("ignore")
+
 
 import os
 import numpy as np
@@ -28,15 +27,12 @@ from ray.tune.schedulers import PopulationBasedTraining
 from ray.tune.utils import validate_save_restore
 from ray.tune import grid_search, run, sample_from
 
-
-
 from tensorflow.python.keras.backend import set_session
 from tensorflow.python.keras.datasets import cifar10
 from tensorflow.python.keras.layers import Input, Dense, Dropout, Flatten
 from tensorflow.python.keras.layers import Convolution2D, MaxPooling2D
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
-
 
 import matplotlib.style as style
 import matplotlib.pyplot as plt
@@ -50,13 +46,13 @@ from ray.tune import register_trainable
 from ray.tune import Trainable
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=2)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=1)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=500)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_500')
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=1000)
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_201020')
 
 args = parser.parse_args()
 print(f"args.n_experiments : {args.n_experiments}")
@@ -101,9 +97,7 @@ EXPERIMENT_NAME = 'pbt-cifar10-ucb-v1.0'
 CUMULATIVE_REWARDS_EACH_BANDIT = [[]] * K
 CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 
-
 num_classes = 10
-
 
 
 class Cifar10Model(Trainable):
@@ -206,13 +200,12 @@ class Cifar10Model(Trainable):
         pass
 
 
-
 ############################################
 # 아래는 UCB State 추가함
 ############################################
 
 class ucb_state:
-    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
+    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action=0):
         self.n_params = n_params
         self.n = 0
         self.selected = 0
@@ -285,7 +278,6 @@ class ucb_state:
 
 
 def experiment():
-
     ucbstate = None
 
     if IS_UCB:
@@ -323,7 +315,7 @@ def experiment():
             "training_iteration": TRAINING_ITERATION,
         },
         num_samples=NUM_WORKERS,
-        # resources_per_trial={"cpu": 10, "gpu": 0.25},
+        resources_per_trial={"gpu": 1},
         # PBT starts by training many neural networks in parallel with random hyperparameters.
         config={
             "epochs": 1,
@@ -333,7 +325,8 @@ def experiment():
             "decay": sample_from(lambda spec: spec.config.lr / 100.0),
             # "dropout": grid_search([0.25, 0.5]),
             "dropout": 0.5,
-            "num_gpus":0.25,
+            # "num_cpus":32,
+            "num_gpus": 1,
         })
 
     # Plot by wall-clock time
@@ -386,8 +379,7 @@ if __name__ == '__main__':
 
     final_results = []
 
-    # for u in [True, False]:
-    for u in [False]:
+    for u in [True, False]:
         list_accuracy = []
         for i in range(N_EXPERIMENTS):
             K = int(math.pow(2, N_PARAMS))

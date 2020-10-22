@@ -40,7 +40,7 @@ parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=200)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='dqn_final_4')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='dqn_final_5')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
@@ -119,7 +119,7 @@ class ucb_state:
         pad = [0] * (self.n_params - size)
         return pad + bits
 
-    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로 
+    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로
     # 이터레이션을 지정받게 해서 그 주기만큼의 리워드를 보고 perturb를 몇번 해서 그간의 metric의 증가율을 보는것으로 평가
     def pull(self):
         self.n = self.n + 1
@@ -149,7 +149,7 @@ class ucb_state:
         #     raise Exception(f"{self.last_update_n_refleceted_reward} 이후 metric 업데이트가 필요합니다.")
 
     # 스코어(accuracy or reward or any metric)을 저장한다.
-    # reflected_reward에서는 지난 리워드 반영 체크해야함 
+    # reflected_reward에서는 지난 리워드 반영 체크해야함
     # pull() 하기전에 reward를 반영해줘야함
     def reflect_reward(self, episode_reward):
         assert self.n != 0 and self.n % self.n_episode_iteration == 0
@@ -279,7 +279,7 @@ def experiment():
 if __name__ == '__main__':
 
     for optimal_exploration in [True, False]:
-        for n_episode_step in range(2, N_EPISODE_STEP+1):
+        for n_episode_step in range(3, N_EPISODE_STEP+1):
 
             final_results = []
 
@@ -294,10 +294,11 @@ if __name__ == '__main__':
                     EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}-{IDX}'
                     list_accuracy.append(experiment())
 
-                    ## Save pickle
-                    with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                        pickle.dump(list_accuracy, fw)
-                    print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+                ## Save pickle
+                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                    pickle.dump(list_accuracy, fw)
+                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
                 avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
                 final_results.append(np.average(list_accuracy))
@@ -305,7 +306,7 @@ if __name__ == '__main__':
             EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
 
             print('============================final_result============================')
-            f = open(f"{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
+            f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
             print('UCB True: ', final_results[0])
             print('UCB False: ', final_results[1])
             f.write(f"'UCB True: ', {final_results[0]}\n")
