@@ -18,7 +18,6 @@ import numpy as np
 import torch
 import torch.optim as optim
 from ray.tune.examples.mnist_pytorch import train, test, ConvNet, get_data_loaders
-
 import ray
 from ray import tune
 from ray.tune import run, sample_from, run_experiments
@@ -46,12 +45,12 @@ from ray.tune import register_trainable
 from ray.tune import Trainable
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=1)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=5)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=1000)
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=500)
 parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_201020')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=1)
 
@@ -296,7 +295,7 @@ def experiment():
         perturbation_interval=PERTUBATION_INTERVAL,
         hyperparam_mutations={
             "dropout": lambda: np.random.uniform(0, 1),
-            "lr": lambda: np.random.uniform(0.0003, 0.003),
+            "lr": lambda: np.random.uniform(0.001, 0.003),
             "batch_size": lambda: random.choice([64, 128, 256, 512])
         }
     )
@@ -324,7 +323,7 @@ def experiment():
             "epochs": 1,
             "batch_size": 64,
             # "lr": grid_search([10**-4, 10**-5]),
-            "lr": 1e-5,  # 1e-4,
+            "lr": 1e-4,  # 1e-4,
             "decay": sample_from(lambda spec: spec.config.lr / 100.0),
             # "dropout": grid_search([0.25, 0.5]),
             "dropout": 0.5,
@@ -381,39 +380,38 @@ def experiment():
 if __name__ == '__main__':
 
     final_results = []
+    optimal_exploration = True
+    # for optimal_exploration in [True, False]:
+    for n_episode_step in range(3, N_EPISODE_STEP+1):
 
-    for optimal_exploration in [True, False]:
-        for n_episode_step in range(3, N_EPISODE_STEP+1):
+        final_results = []
 
+        for u in [True, False]:
+            list_accuracy = []
+            for i in range(N_EXPERIMENTS):
+                K = int(math.pow(2, N_PARAMS))
+                IS_UCB = u
+                IDX = i
+                N_EPISODE_STEP = n_episode_step
+                OPTIMAL_EXPLORATION = optimal_exploration
+                EXPERIMENT_NAME = f'pbt-cifar10-{IS_UCB}-{IDX}'
+                list_accuracy.append(experiment())
 
-            final_results = []
+            EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+            ## Save pickle
+            with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                pickle.dump(list_accuracy, fw)
+            print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+            avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+            print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
+            final_results.append(np.average(list_accuracy))
 
-            for u in [True, False]:
-                list_accuracy = []
-                for i in range(N_EXPERIMENTS):
-                    K = int(math.pow(2, N_PARAMS))
-                    IS_UCB = u
-                    IDX = i
-                    N_EPISODE_STEP = n_episode_step
-                    OPTIMAL_EXPLORATION = optimal_exploration
-                    EXPERIMENT_NAME = f'pbt-cifar10-{IS_UCB}-{IDX}'
-                    list_accuracy.append(experiment())
+        EXPERIMENT_RESULT_NAME = f'pbt-cifar10-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
 
-                EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-                ## Save pickle
-                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                    pickle.dump(list_accuracy, fw)
-                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-                avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-                print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
-                final_results.append(np.average(list_accuracy))
-
-            EXPERIMENT_RESULT_NAME = f'pbt-cifar10-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-
-            print('============================final_result============================')
-            f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
-            print('UCB True: ', final_results[0])
-            print('UCB False: ', final_results[1])
-            f.write(f"'UCB True: ', {final_results[0]}\n")
-            f.write(f"'UCB False: ', {final_results[1]}\n")
-            f.close()
+        print('============================final_result============================')
+        f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
+        print('UCB True: ', final_results[0])
+        print('UCB False: ', final_results[1])
+        f.write(f"'UCB True: ', {final_results[0]}\n")
+        f.write(f"'UCB False: ', {final_results[1]}\n")
+        f.close()

@@ -11,6 +11,7 @@ https://github.com/ray-project/ray/pull/1729/files
 """
 
 import tensorflow as tf
+tf.config.experimental.list_physical_devices('GPU')
 try:
     tf.get_logger().setLevel('INFO')
 except Exception as exc:
@@ -45,13 +46,14 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=16)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=50)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=500)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_500')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='mnist_500')
+parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
 print(f"args.n_experiments : {args.n_experiments}")
@@ -60,7 +62,7 @@ print(f"args.perturbation_interval : {args.perturbation_interval}")
 print(f"args.training_iteration : {args.training_iteration}")
 print(f"args.ucb : {args.ucb}")
 print(f"args.save_dir : {args.save_dir}")
-
+print(f"args.episode_step : {args.episode_step}")
 
 
 ############################################
@@ -68,14 +70,17 @@ print(f"args.save_dir : {args.save_dir}")
 ############################################
 N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
-# N_EPISODE_STEP = 5
+#N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
 N_PARAMS = 3
 K = int(math.pow(2, N_PARAMS))
 NUM_WORKERS = args.n_workers
 PERTUBATION_INTERVAL = args.perturbation_interval
+OPTIMAL_EXPLORATION = True
 
-IS_UCB = True
+IS_UCB = False
+if args.ucb:
+    IS_UCB = True
 
 METRIC_NAME="mean_accuracy"
 SAVE_DIR = args.save_dir
@@ -125,7 +130,7 @@ class ucb_state:
         pad = [0] * (self.n_params - size)
         return pad + bits
 
-    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로 
+    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로
     # 이터레이션을 지정받게 해서 그 주기만큼의 리워드를 보고 perturb를 몇번 해서 그간의 metric의 증가율을 보는것으로 평가
     def pull(self):
         self.n = self.n + 1
@@ -148,15 +153,15 @@ class ucb_state:
                     self.max_upper_bound = upper_bound
                     selected = i
             self.num_of_selections[selected] = self.num_of_selections[selected] + 1
+            print(f'self.num_of_selections status is changed like {self.num_of_selections}')
             self.selected = selected
             return selected
         # else:
         #     raise Exception(f"{self.last_update_n_refleceted_reward} 이후 metric 업데이트가 필요합니다.")
 
     # 스코어(accuracy or reward or any metric)을 저장한다.
-    # reflected_reward에서는 지난 리워드 반영 체크해야함 
+    # reflected_reward에서는 지난 리워드 반영 체크해야함
     # pull() 하기전에 reward를 반영해줘야함
-    
     def reflect_reward(self, episode_reward):
         assert self.n != 0 and self.n % self.n_episode_iteration == 0
         # 이전 score와의 차이를 저장
@@ -216,14 +221,14 @@ def experiment():
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS)
+        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
-        metric="mean_accuracy",
+        metric=METRIC_NAME,
         mode="max",
         ucb=ucbstate,
-        perturbation_interval=5,
+        perturbation_interval=PERTUBATION_INTERVAL,
         hyperparam_mutations={
             # distribution for resampling
             "lr": lambda: np.random.uniform(0.0001, 1),
@@ -241,7 +246,7 @@ def experiment():
         PytorchTrainble,
         name=EXPERIMENT_NAME,
         scheduler=scheduler,
-        reuse_actors=True,
+        # reuse_actors=True,
         checkpoint_freq=20,
         verbose=1,
         stop={
@@ -266,9 +271,12 @@ def experiment():
     # This plots everything on the same plot
     ax = None
     for d in dfs.values():
-        ax = d.plot("training_iteration", "mean_accuracy", ax=ax, legend=False)
+        ax = d.plot("training_iteration", METRIC_NAME, ax=ax, legend=False)
 
-    a = np.asarray([list(dfs.values())[i].mean_accuracy.max() for i in range(K)])
+    if METRIC_NAME == 'mean_accuracy':
+        a = np.asarray([list(dfs.values())[i].mean_accuracy.max() for i in range(NUM_WORKERS)])
+    elif METRIC_NAME == 'episode_reward_mean':
+        a = np.asarray([list(dfs.values())[i].episode_reward_mean.max() for i in range(NUM_WORKERS)])
 
     topk = heapq.nlargest(3, range(len(a)), a.__getitem__)
     sum = 0
@@ -320,6 +328,12 @@ if __name__ == '__main__':
         print(f'average accuracy over {N_EXPERIMENTS} experiments ucb {u} : {np.average(list_accuracy)}')
         final_results.append(np.average(list_accuracy))
 
+    EXPERIMENT_RESULT_NAME = f'pbt-mnist-{OPTIMAL_EXPLORATION}'
+
     print('============================final_result============================')
+    f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
     print('UCB True: ', final_results[0])
     print('UCB False: ', final_results[1])
+    f.write(f"'UCB True: ', {final_results[0]}\n")
+    f.write(f"'UCB False: ', {final_results[1]}\n")
+    f.close()
