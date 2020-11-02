@@ -164,9 +164,18 @@ class ucb_state:
             return True
         else:
             return False
-
-
 ############################################
+
+# Postprocess the perturbed config to ensure it's still valid
+def explore(config):
+    # ensure we collect enough timesteps to do sgd
+    if config["train_batch_size"] < config["sgd_minibatch_size"] * 2:
+        config["train_batch_size"] = config["sgd_minibatch_size"] * 2
+    # ensure we run at least one sgd iter
+    if config["num_sgd_iter"] < 1:
+        config["num_sgd_iter"] = 1
+    return config
+
 
 def experiment():
 
@@ -198,7 +207,8 @@ def experiment():
             "num_sgd_iter": lambda: random.randint(1, 30),
             "sgd_minibatch_size": lambda: random.randint(32, 512),
             "train_batch_size": lambda: random.randint(2500, 10000),  # sgd_minibatch_size must be smaller than train_batch_size
-        }
+        },
+        custom_explore_fn=explore
     )
 
     ray.shutdown()  # Restart Ray defensively in case the ray connection is lost.

@@ -382,36 +382,35 @@ if __name__ == '__main__':
     final_results = []
     optimal_exploration = True
     # for optimal_exploration in [True, False]:
-    for n_episode_step in range(3, N_EPISODE_STEP+1):
+    # for n_episode_step in range(3, N_EPISODE_STEP+1):
 
-        final_results = []
+    final_results = []
 
-        for u in [True, False]:
-            list_accuracy = []
-            for i in range(N_EXPERIMENTS):
-                K = int(math.pow(2, N_PARAMS))
-                IS_UCB = u
-                IDX = i
-                N_EPISODE_STEP = n_episode_step
-                OPTIMAL_EXPLORATION = optimal_exploration
-                EXPERIMENT_NAME = f'pbt-cifar10-{IS_UCB}-{IDX}'
-                list_accuracy.append(experiment())
+    for u in [True, False]:
+        list_accuracy = []
+        for i in range(N_EXPERIMENTS):
+            K = int(math.pow(2, N_PARAMS))
+            IS_UCB = u
+            IDX = i
+            OPTIMAL_EXPLORATION = optimal_exploration
+            EXPERIMENT_NAME = f'pbt-cifar10-{IS_UCB}-{IDX}'
+            list_accuracy.append(experiment())
 
-            EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-            ## Save pickle
-            with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                pickle.dump(list_accuracy, fw)
-            print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-            avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-            print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
-            final_results.append(np.average(list_accuracy))
+        EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+        ## Save pickle
+        with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+            pickle.dump(list_accuracy, fw)
+        print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+        avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+        print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
+        final_results.append(np.average(list_accuracy))
 
-        EXPERIMENT_RESULT_NAME = f'pbt-cifar10-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+    EXPERIMENT_RESULT_NAME = f'pbt-cifar10-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
 
-        print('============================final_result============================')
-        f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
-        print('UCB True: ', final_results[0])
-        print('UCB False: ', final_results[1])
-        f.write(f"'UCB True: ', {final_results[0]}\n")
-        f.write(f"'UCB False: ', {final_results[1]}\n")
-        f.close()
+    print('============================final_result============================')
+    f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
+    print('UCB True: ', final_results[0])
+    print('UCB False: ', final_results[1])
+    f.write(f"'UCB True: ', {final_results[0]}\n")
+    f.write(f"'UCB False: ', {final_results[1]}\n")
+    f.close()

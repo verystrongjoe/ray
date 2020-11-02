@@ -3,6 +3,7 @@ https://towardsdatascience.com/deep-reinforcement-learning-and-hyperparameter-tu
 """
 
 import tensorflow as tf
+tf.config.experimental.list_physical_devices('GPU')
 try:
     tf.get_logger().setLevel('INFO')
 except Exception as exc:
@@ -30,17 +31,17 @@ import random
 import math
 import heapq
 import pickle
-
 import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=8)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=5)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=600)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_600_2')
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=700)
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='1102_1')
+parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
 print(f"args.n_experiments : {args.n_experiments}")
@@ -48,22 +49,22 @@ print(f"args.n_workers : {args.n_workers}")
 print(f"args.perturbation_interval : {args.perturbation_interval}")
 print(f"args.training_iteration : {args.training_iteration}")
 print(f"args.ucb : {args.ucb}")
+print(f"args.save_dir : {args.save_dir}")
+print(f"args.episode_step : {args.episode_step}")
+
 
 ############################################
 # 실험 파라메터
 ############################################
 N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
-# N_EPISODE_STEP = 5
+N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
 N_PARAMS = 6
 K = int(math.pow(2, N_PARAMS))
 NUM_WORKERS = args.n_workers
 PERTUBATION_INTERVAL = args.perturbation_interval
-OPTIMAL_VALUE_SCALE = 2
-
-print(f"args.save_dir : {args.save_dir}")
-
+OPTIMAL_EXPLORATION = True
 
 IS_UCB = False
 if args.ucb:
@@ -92,6 +93,7 @@ CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 # 아래는 UCB State 추가함
 ############################################
 
+
 class ucb_state:
     def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
         self.n_params = n_params
@@ -108,8 +110,7 @@ class ucb_state:
 
         if optimal_exploration:
             for i in range(self.K):
-                self.rewards[i] = np.sum(self.bitfield(i)) * OPTIMAL_VALUE_SCALE
-                print(self.rewards[i])
+                self.rewards[i] = np.sum(self.bitfield(i))
 
     def bitfield(self, selected):
         bits = [int(digit) for digit in bin(selected)[2:]]  # [2:] to chop off the "0b" part
@@ -117,12 +118,11 @@ class ucb_state:
         pad = [0] * (self.n_params - size)
         return pad + bits
 
-    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로 
+    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로
     # 이터레이션을 지정받게 해서 그 주기만큼의 리워드를 보고 perturb를 몇번 해서 그간의 metric의 증가율을 보는것으로 평가
     def pull(self):
         self.n = self.n + 1
-        # 쉽게 얘기해서 에피소드 이터레이션동안 perturb하는 파라메터를 변경하지 않기
-        if self.n > self.last_update_n_refleceted_reward and self.n < self.last_update_n_refleceted_reward + self.n_episode_iteration:
+        if self.n != 0 and self.n > self.last_update_n_refleceted_reward and self.n < self.last_update_n_refleceted_reward + self.n_episode_iteration:
             return self.selected
         # elif self.n == self.n_episode_iteration + 1:
         else:
@@ -141,15 +141,15 @@ class ucb_state:
                     self.max_upper_bound = upper_bound
                     selected = i
             self.num_of_selections[selected] = self.num_of_selections[selected] + 1
+            print(f'self.num_of_selections status is changed like {self.num_of_selections}')
             self.selected = selected
             return selected
         # else:
         #     raise Exception(f"{self.last_update_n_refleceted_reward} 이후 metric 업데이트가 필요합니다.")
 
     # 스코어(accuracy or reward or any metric)을 저장한다.
-    # reflected_reward에서는 지난 리워드 반영 체크해야함 
+    # reflected_reward에서는 지난 리워드 반영 체크해야함
     # pull() 하기전에 reward를 반영해줘야함
-    
     def reflect_reward(self, episode_reward):
         assert self.n != 0 and self.n % self.n_episode_iteration == 0
         # 이전 score와의 차이를 저장
@@ -171,10 +171,10 @@ def experiment():
 
     ucbstate = None
 
-    if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS)
-
     os.makedirs(SAVE_DIR, exist_ok=True)
+
+    if IS_UCB:
+        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -287,24 +287,31 @@ if __name__ == '__main__':
 
     final_results = []
 
-    # for u in [True, False]:
-    for u in [False]:
+    for u in [True, False]:
         list_accuracy = []
         for i in range(N_EXPERIMENTS):
             K = int(math.pow(2, N_PARAMS))
-            NUM_WORKERS = 8
             IS_UCB = u
             IDX = i
-            EXPERIMENT_NAME = f'pbt-humanoid-{IS_UCB}-{IDX}'
+            OPTIMAL_EXPLORATION = True
+            EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}-{IDX}'
             list_accuracy.append(experiment())
 
+        EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
         ## Save pickle
         with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
             pickle.dump(list_accuracy, fw)
         print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-        print(f'average accuracy over {N_EXPERIMENTS} experiments ucb {u} : {np.average(list_accuracy)}')
+        avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+        print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
         final_results.append(np.average(list_accuracy))
 
+    EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+
     print('============================final_result============================')
+    f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
     print('UCB True: ', final_results[0])
     print('UCB False: ', final_results[1])
+    f.write(f"'UCB True: ', {final_results[0]}\n")
+    f.write(f"'UCB False: ', {final_results[1]}\n")
+    f.close()
