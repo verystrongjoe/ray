@@ -3,6 +3,7 @@ https://towardsdatascience.com/deep-reinforcement-learning-and-hyperparameter-tu
 """
 
 import tensorflow as tf
+tf.config.experimental.list_physical_devices('GPU')
 try:
     tf.get_logger().setLevel('INFO')
 except Exception as exc:
@@ -14,6 +15,7 @@ import os
 import numpy as np
 import torch
 import torch.optim as optim
+from torchvision import datasets
 from ray.tune.examples.mnist_pytorch import train, test, ConvNet, get_data_loaders
 
 import ray
@@ -34,13 +36,13 @@ import pickle
 import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=1)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=5)
 parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=500)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='data_600')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='breakout_exploration')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=1)
 
 args = parser.parse_args()
@@ -49,6 +51,9 @@ print(f"args.n_workers : {args.n_workers}")
 print(f"args.perturbation_interval : {args.perturbation_interval}")
 print(f"args.training_iteration : {args.training_iteration}")
 print(f"args.ucb : {args.ucb}")
+print(f"args.save_dir : {args.save_dir}")
+print(f"args.episode_step : {args.episode_step}")
+
 
 ############################################
 # 실험 파라메터
@@ -61,9 +66,7 @@ N_PARAMS = 6
 K = int(math.pow(2, N_PARAMS))
 NUM_WORKERS = args.n_workers
 PERTUBATION_INTERVAL = args.perturbation_interval
-
-print(f"args.save_dir : {args.save_dir}")
-
+OPTIMAL_EXPLORATION = True
 
 IS_UCB = False
 if args.ucb:
@@ -92,8 +95,8 @@ CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 # 아래는 UCB State 추가함
 ############################################
 
-class ucb_state:
-    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
+class UcbState:
+    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action=0, explore_c=1):
         self.n_params = n_params
         self.n = 0
         self.selected = 0
@@ -105,6 +108,7 @@ class ucb_state:
         self.check_reflected_reward = True
         self.last_update_n_refleceted_reward = 0
         self.last_score = 0
+        self.explore_c = explore_c
 
         if optimal_exploration:
             for i in range(self.K):
@@ -116,7 +120,7 @@ class ucb_state:
         pad = [0] * (self.n_params - size)
         return pad + bits
 
-    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로 
+    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로
     # 이터레이션을 지정받게 해서 그 주기만큼의 리워드를 보고 perturb를 몇번 해서 그간의 metric의 증가율을 보는것으로 평가
     def pull(self):
         self.n = self.n + 1
@@ -132,7 +136,7 @@ class ucb_state:
                 if self.num_of_selections[i] > 0:
                     average_reward = self.rewards[i] / self.num_of_selections[i]
                     delta_i = math.sqrt(2 * math.log(self.n + 1) / self.num_of_selections[i])
-                    upper_bound = average_reward + delta_i
+                    upper_bound = average_reward + self.explore_c * delta_i
                 else:
                     upper_bound = 1e400
                 if upper_bound > self.max_upper_bound:
@@ -148,7 +152,6 @@ class ucb_state:
     # 스코어(accuracy or reward or any metric)을 저장한다.
     # reflected_reward에서는 지난 리워드 반영 체크해야함 
     # pull() 하기전에 reward를 반영해줘야함
-    
     def reflect_reward(self, episode_reward):
         assert self.n != 0 and self.n % self.n_episode_iteration == 0
         # 이전 score와의 차이를 저장
@@ -171,9 +174,7 @@ def experiment():
     ucbstate = None
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP)
-
-    os.makedirs(SAVE_DIR, exist_ok=True)
+        ucbstate = UcbState(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION, explore_c=c)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -273,24 +274,40 @@ def experiment():
 
 if __name__ == '__main__':
 
-    final_results = []
+    for optimal_exploration in [True, False]:
+        for c in range(2, 7, 2):
 
-    for u in [True, False]:
-        list_accuracy = []
-        for i in range(N_EXPERIMENTS):
-            K = int(math.pow(2, N_PARAMS))
-            IS_UCB = u
-            IDX = i
-            EXPERIMENT_NAME = f'pbt-breakout-{IS_UCB}-{IDX}'
-            list_accuracy.append(experiment())
+            final_results = []
 
-        ## Save pickle
-        with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-            pickle.dump(list_accuracy, fw)
-        print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-        print(f'average accuracy over {N_EXPERIMENTS} experiments ucb {u} : {np.average(list_accuracy)}')
-        final_results.append(np.average(list_accuracy))
+            for u in [True, False]:
+                list_accuracy = []
+                for i in range(N_EXPERIMENTS):
+                    K = int(math.pow(2, N_PARAMS))
+                    IDX = i
+                    IS_UCB = u
+                    OPTIMAL_EXPLORATION = optimal_exploration
+                    list_accuracy.append(experiment(c))
 
-    print('============================final_result============================')
-    print('UCB True: ', final_results[0])
-    print('UCB False: ', final_results[1])
+                EXPERIMENT_NAME = f'pbt-mnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
+                ## Save pickle
+                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                    pickle.dump(list_accuracy, fw)
+                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                avg_title = f'pbt-breakout-{c}-{OPTIMAL_EXPLORATION}'
+                print(f'average reward over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
+                final_results.append(np.average(list_accuracy))
+
+            EXPERIMENT_RESULT_NAME = f'pbt-breakout-{c}-{OPTIMAL_EXPLORATION}'
+
+            print(f'============================ {EXPERIMENT_RESULT_NAME} final_result============================')
+            f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
+            print('UCB True: ', final_results[0])
+            print('UCB False: ', final_results[1])
+            f.write(f"'UCB True: ', {final_results[0]}\n")
+            f.write(f"'UCB False: ', {final_results[1]}\n")
+            f.close()
+
+
+
+
+
