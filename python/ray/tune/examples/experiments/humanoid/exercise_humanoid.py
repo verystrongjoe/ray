@@ -34,12 +34,12 @@ import pickle
 import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=5)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=10)
 parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=700)
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=50)
 parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='1102_1')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
@@ -95,7 +95,7 @@ CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 
 
 class ucb_state:
-    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
+    def __init__(self, n_params=2, n_episode_iteration=1, optimal_exploration=True, default_action =0):
         self.n_params = n_params
         self.n = 0
         self.selected = 0

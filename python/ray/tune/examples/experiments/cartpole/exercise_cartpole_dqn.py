@@ -15,7 +15,6 @@ import os
 import numpy as np
 import torch
 import torch.optim as optim
-from ray.tune.examples.mnist_pytorch import train, test, ConvNet, get_data_loaders
 
 import ray
 from ray import tune
@@ -33,14 +32,15 @@ import heapq
 import pickle
 import argparse
 
+
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=3)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=30)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=8)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=200)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='dqn_final_4')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='dqn_with_exploration')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
@@ -75,6 +75,8 @@ SAVE_DIR = args.save_dir
 
 
 EXPERIMENT_NAME = 'pbt-cartpole-ucb-v1.0'
+
+
 #############################################
 # 실험 과정 및 결과 metrics
 # - accuracy or reward over training iteration (plot)
@@ -90,13 +92,9 @@ EXPERIMENT_NAME = 'pbt-cartpole-ucb-v1.0'
 CUMULATIVE_REWARDS_EACH_BANDIT = [[]] * K
 CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 
-############################################
-# 아래는 UCB State 추가함
-############################################
 
-
-class ucb_state:
-    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
+class UcbState:
+    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action=0, explore_c=1):
         self.n_params = n_params
         self.n = 0
         self.selected = 0
@@ -108,6 +106,7 @@ class ucb_state:
         self.check_reflected_reward = True
         self.last_update_n_refleceted_reward = 0
         self.last_score = 0
+        self.explore_c = explore_c
 
         if optimal_exploration:
             for i in range(self.K):
@@ -119,7 +118,7 @@ class ucb_state:
         pad = [0] * (self.n_params - size)
         return pad + bits
 
-    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로 
+    # 요청마다 selected가 바뀌면 리워드 수집이 용이하지 않음. 그러므로
     # 이터레이션을 지정받게 해서 그 주기만큼의 리워드를 보고 perturb를 몇번 해서 그간의 metric의 증가율을 보는것으로 평가
     def pull(self):
         self.n = self.n + 1
@@ -135,7 +134,7 @@ class ucb_state:
                 if self.num_of_selections[i] > 0:
                     average_reward = self.rewards[i] / self.num_of_selections[i]
                     delta_i = math.sqrt(2 * math.log(self.n + 1) / self.num_of_selections[i])
-                    upper_bound = average_reward + delta_i
+                    upper_bound = average_reward + self.explore_c * delta_i
                 else:
                     upper_bound = 1e400
                 if upper_bound > self.max_upper_bound:
@@ -149,7 +148,7 @@ class ucb_state:
         #     raise Exception(f"{self.last_update_n_refleceted_reward} 이후 metric 업데이트가 필요합니다.")
 
     # 스코어(accuracy or reward or any metric)을 저장한다.
-    # reflected_reward에서는 지난 리워드 반영 체크해야함 
+    # reflected_reward에서는 지난 리워드 반영 체크해야함
     # pull() 하기전에 reward를 반영해줘야함
     def reflect_reward(self, episode_reward):
         assert self.n != 0 and self.n % self.n_episode_iteration == 0
@@ -168,14 +167,16 @@ class ucb_state:
 
 ############################################
 
-def experiment():
+
+
+def experiment(c):
 
     ucbstate = None
 
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION)
+        ucbstate = UcbState(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION, explore_c=c)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -279,7 +280,7 @@ def experiment():
 if __name__ == '__main__':
 
     for optimal_exploration in [True, False]:
-        for n_episode_step in range(2, N_EPISODE_STEP+1):
+        for c in range(2, 7, 2):
 
             final_results = []
 
@@ -289,20 +290,19 @@ if __name__ == '__main__':
                     K = int(math.pow(2, N_PARAMS))
                     IS_UCB = u
                     IDX = i
-                    N_EPISODE_STEP = n_episode_step
                     OPTIMAL_EXPLORATION = optimal_exploration
-                    EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}-{IDX}'
-                    list_accuracy.append(experiment())
+                    EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}-{IDX}'
+                    list_accuracy.append(experiment(c))
 
-                    ## Save pickle
-                    with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                        pickle.dump(list_accuracy, fw)
-                    print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-                avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+                ## Save pickle
+                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                    pickle.dump(list_accuracy, fw)
+                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                avg_title = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
                 final_results.append(np.average(list_accuracy))
 
-            EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+            EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
 
             print('============================final_result============================')
             f = open(f"{EXPERIMENT_RESULT_NAME}_result.txt", "w+")

@@ -4,8 +4,8 @@ from ray.tune.schedulers.hb_bohb import HyperBandForBOHB
 from ray.tune.schedulers.async_hyperband import (AsyncHyperBandScheduler,
                                                  ASHAScheduler)
 from ray.tune.schedulers.median_stopping_rule import MedianStoppingRule
-from ray.tune.schedulers.pbt import (PopulationBasedTraining,
-                                     PopulationBasedTrainingReplay)
+from ray.tune.schedulers.ucb import UcbState
+from ray.tune.schedulers.pbt import (PopulationBasedTraining, PopulationBasedTrainingReplay)
 
 
 def create_scheduler(
@@ -52,5 +52,5 @@ __all__ = [
     "TrialScheduler", "HyperBandScheduler", "AsyncHyperBandScheduler",
     "ASHAScheduler", "MedianStoppingRule", "FIFOScheduler",
     "PopulationBasedTraining", "PopulationBasedTrainingReplay",
-    "HyperBandForBOHB"
+    "HyperBandForBOHB", "UcbState"
 ]

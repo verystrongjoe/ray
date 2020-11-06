@@ -46,7 +46,7 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=50)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=20)
 parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
@@ -70,7 +70,7 @@ print(f"args.episode_step : {args.episode_step}")
 ############################################
 N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
-#N_EPISODE_STEP = args.episode_step
+N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
 N_PARAMS = 3
 K = int(math.pow(2, N_PARAMS))

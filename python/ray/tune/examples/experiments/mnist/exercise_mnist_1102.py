@@ -1,5 +1,12 @@
 """
-https://towardsdatascience.com/deep-reinforcement-learning-and-hyperparameter-tuning-df9bf48e4bd2
+mnist
+https://github.com/ray-project/tutorial/blob/master/tune_exercises/exercise_3_pbt.ipynb
+
+
+cifar10
+https://github.com/ray-project/ray/pull/1729/files
+
+참고!!!
 """
 
 import tensorflow as tf
@@ -15,6 +22,7 @@ import os
 import numpy as np
 import torch
 import torch.optim as optim
+from torchvision import datasets
 from ray.tune.examples.mnist_pytorch import train, test, ConvNet, get_data_loaders
 
 import ray
@@ -28,19 +36,22 @@ import matplotlib.style as style
 import matplotlib.pyplot as plt
 style.use("ggplot")
 import random
+datasets.MNIST("~/data", train=True, download=True)
+
 import math
 import heapq
 import pickle
 import argparse
 
+
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=50)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=30)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=8)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=200)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='dqn_final_5')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='mnist_with_exploration')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
@@ -70,11 +81,10 @@ IS_UCB = False
 if args.ucb:
     IS_UCB = True
 
-METRIC_NAME = 'episode_reward_mean'
+METRIC_NAME="mean_accuracy"
 SAVE_DIR = args.save_dir
 
-
-EXPERIMENT_NAME = 'pbt-cartpole-ucb-v1.0'
+EXPERIMENT_NAME = 'pbt-mnist-ucb-v1.0'
 #############################################
 # 실험 과정 및 결과 metrics
 # - accuracy or reward over training iteration (plot)
@@ -94,9 +104,8 @@ CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 # 아래는 UCB State 추가함
 ############################################
 
-
-class ucb_state:
-    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
+class UcbState:
+    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action=0, explore_c=1):
         self.n_params = n_params
         self.n = 0
         self.selected = 0
@@ -108,6 +117,7 @@ class ucb_state:
         self.check_reflected_reward = True
         self.last_update_n_refleceted_reward = 0
         self.last_score = 0
+        self.explore_c = explore_c
 
         if optimal_exploration:
             for i in range(self.K):
@@ -135,7 +145,7 @@ class ucb_state:
                 if self.num_of_selections[i] > 0:
                     average_reward = self.rewards[i] / self.num_of_selections[i]
                     delta_i = math.sqrt(2 * math.log(self.n + 1) / self.num_of_selections[i])
-                    upper_bound = average_reward + delta_i
+                    upper_bound = average_reward + self.explore_c * delta_i
                 else:
                     upper_bound = 1e400
                 if upper_bound > self.max_upper_bound:
@@ -168,14 +178,47 @@ class ucb_state:
 
 ############################################
 
-def experiment():
+
+class PytorchTrainble(tune.Trainable):
+    def _setup(self, config):
+        self.device = torch.device("cpu")
+        self.train_loader, self.test_loader = get_data_loaders()
+        self.model = ConvNet().to(self.device)
+        self.optimizer = optim.SGD(
+            self.model.parameters(),
+            lr=config.get("lr", 0.01),
+            momentum=config.get("momentum", 0.9))
+
+    def _train(self):
+        train(self.model, self.optimizer, self.train_loader, device=self.device)
+        acc = test(self.model, self.test_loader, self.device)
+        return {"mean_accuracy": acc}
+
+    def _save(self, checkpoint_dir):
+        checkpoint_path = os.path.join(checkpoint_dir, "model.pth")
+        torch.save(self.model.state_dict(), checkpoint_path)
+        return checkpoint_path
+
+    def _restore(self, checkpoint_path):
+        self.model.load_state_dict(torch.load(checkpoint_path))
+
+    def reset_config(self, new_config):
+        del self.optimizer
+        self.optimizer = optim.SGD(
+            self.model.parameters(),
+            lr=new_config.get("lr", 0.01),
+            momentum=new_config.get("momentum", 0.9))
+        return True
+
+
+def experiment(c):
 
     ucbstate = None
 
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION)
+        ucbstate = UcbState(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION, explore_c=c)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -185,14 +228,10 @@ def experiment():
         perturbation_interval=PERTUBATION_INTERVAL,
         hyperparam_mutations={
             # distribution for resampling
-            # "lambda": lambda: random.uniform(0.9, 1.0),
-            # "clip_param": lambda: random.uniform(0.01, 0.5),
-            "lr": [2e-6, 5e-6, 1e-6],    # [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
-            "buffer_size": lambda: random.randint(1000, 50000),
-            "target_network_update_freq": lambda: random.randint(100, 500),
-            # "num_sgd_iter": lambda: random.randint(1, 30),
-            # "sgd_minibatch_size": lambda: random.randint(128, 2048),
-            # "train_batch_size": lambda: random.randint(2000, 16000),
+            "lr": lambda: np.random.uniform(0.0001, 1),
+            # allow perturbations within this set of categorical values
+            "momentum": [0.8, 0.9, 0.99],
+            "train_batch_size": lambda: random.randint(32, 256)
         }
     )
 
@@ -201,7 +240,7 @@ def experiment():
     ray.init(log_to_driver=False)
 
     analysis = tune.run(
-        'DQN',
+        PytorchTrainble,
         name=EXPERIMENT_NAME,
         scheduler=scheduler,
         # reuse_actors=True,
@@ -213,21 +252,10 @@ def experiment():
         num_samples=NUM_WORKERS,
         # PBT starts by training many neural networks in parallel with random hyperparameters.
         config={
-            "env": 'CartPole-v0',
-            # These params are tuned from a fixed starting value.
-            # "lambda": 0.95,
-            # "clip_param": 0.2,
-            "lr": 1e-5,  #1e-4,
-            "buffer_size": 10000,
-            "target_network_update_freq": 500,
-            # These params start off randomly drawn from a set.
-            # "num_sgd_iter": sample_from(
-            #     lambda spec: random.choice([10, 20, 30])),
-            # "sgd_minibatch_size": sample_from(
-            #     lambda spec: random.choice([128, 512, 2048])),
-            # "train_batch_size": sample_from(
-            #     lambda spec: random.choice([10000, 20000, 40000]))
-
+            "lr": tune.uniform(0.001, 1),
+            "momentum": tune.uniform(0.001, 1),
+            "train_batch_size": sample_from(
+                lambda spec: random.choice([32, 64, 128, 256])),
         })
 
     # Plot by wall-clock time
@@ -279,7 +307,7 @@ def experiment():
 if __name__ == '__main__':
 
     for optimal_exploration in [True, False]:
-        for n_episode_step in range(3, N_EPISODE_STEP+1):
+        for c in range(2, 7, 2):
 
             final_results = []
 
@@ -287,28 +315,31 @@ if __name__ == '__main__':
                 list_accuracy = []
                 for i in range(N_EXPERIMENTS):
                     K = int(math.pow(2, N_PARAMS))
-                    IS_UCB = u
                     IDX = i
-                    N_EPISODE_STEP = n_episode_step
+                    IS_UCB = u
                     OPTIMAL_EXPLORATION = optimal_exploration
-                    EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}-{IDX}'
-                    list_accuracy.append(experiment())
+                    list_accuracy.append(experiment(c))
 
-                EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+                EXPERIMENT_NAME = f'pbt-mnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
                 ## Save pickle
                 with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
                     pickle.dump(list_accuracy, fw)
                 print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-                avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+                avg_title = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
                 final_results.append(np.average(list_accuracy))
 
-            EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+            EXPERIMENT_RESULT_NAME = f'pbt-mnist-{c}-{OPTIMAL_EXPLORATION}'
 
-            print('============================final_result============================')
+            print(f'============================ {EXPERIMENT_RESULT_NAME} final_result============================')
             f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
             print('UCB True: ', final_results[0])
             print('UCB False: ', final_results[1])
             f.write(f"'UCB True: ', {final_results[0]}\n")
             f.write(f"'UCB False: ', {final_results[1]}\n")
             f.close()
+
+
+
+
+

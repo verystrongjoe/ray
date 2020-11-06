@@ -35,11 +35,11 @@ import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
 parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=20)
-parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=8)
+parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
-parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=100)
+parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=50)
 parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='ppo_params_5')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
@@ -241,7 +241,7 @@ def experiment():
             "train_batch_size": sample_from(
                 lambda spec: random.choice([2500, 5000, 10000])),
             # "kl_coeff" : 0.2
-
+            "num_gpus":1
         })
 
     # Plot by wall-clock time
@@ -292,19 +292,14 @@ def experiment():
 
 if __name__ == '__main__':
 
-    # for optimal_exploration in [True, False]:
-    optimal_exploration = True
-    for n_episode_step in range(3, N_EPISODE_STEP+1):
-
+    for optimal_exploration in [True, False]:
         final_results = []
-
         for u in [True, False]:
             list_accuracy = []
             for i in range(N_EXPERIMENTS):
                 K = int(math.pow(2, N_PARAMS))
                 IS_UCB = u
                 IDX = i
-                N_EPISODE_STEP = n_episode_step
                 OPTIMAL_EXPLORATION = optimal_exploration
                 EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}-{IDX}'
                 list_accuracy.append(experiment())

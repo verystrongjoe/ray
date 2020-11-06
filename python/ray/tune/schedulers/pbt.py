@@ -19,7 +19,9 @@ from ray.tune.suggest.variant_generator import format_vars
 from ray.tune.trial import Trial, Checkpoint
 from ray.util.debug import log_once
 
+
 logger = logging.getLogger(__name__)
+
 
 
 class PBTTrialState:
@@ -231,7 +233,7 @@ class PopulationBasedTraining(FIFOScheduler):
                  reward_attr: Optional[str] = None,
                  metric: Optional[str] = None,
                  mode: Optional[str] = None,
-                 ucb = None,
+                 ucb: UcbState = None,
                  perturbation_interval: float = 60.0,
                  hyperparam_mutations: Dict = None,
                  quantile_fraction: float = 0.25,
@@ -532,10 +534,9 @@ class PopulationBasedTraining(FIFOScheduler):
         print(f'trial_to_clone.trial_id = {trial_to_clone.trial_id}')
         print(f'trial.trial_id = {trial.trial_id}')
 
-
         if self._ucb is not None:
             if self._ucb.is_need_to_reflect_reward():
-                score = np.sum([t.last_result[self._metric] for t in  self._trial_state])
+                score = np.sum([t.last_result[self._metric] for t in self._trial_state])
                 self._ucb.reflect_reward(score)
 
             selected = self._ucb.pull()
