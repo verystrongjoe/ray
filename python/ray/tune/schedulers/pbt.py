@@ -233,7 +233,7 @@ class PopulationBasedTraining(FIFOScheduler):
                  reward_attr: Optional[str] = None,
                  metric: Optional[str] = None,
                  mode: Optional[str] = None,
-                 ucb: UcbState = None,
+                 ucb = None,
                  perturbation_interval: float = 60.0,
                  hyperparam_mutations: Dict = None,
                  quantile_fraction: float = 0.25,
