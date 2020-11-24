@@ -32,7 +32,11 @@ from ray.autoscaler._private.cli_logger import cli_logger, cf
 from ray.autoscaler._private.updater import NodeUpdaterThread
 from ray.autoscaler._private.command_runner import set_using_login_shells, \
                                           set_rsync_silent
+<<<<<<< HEAD:python/ray/autoscaler/_private/commands.py
 from ray.autoscaler._private.log_timer import LogTimer
+=======
+from ray.autoscaler.log_timer import LogTimer
+>>>>>>> upstream/releases/1.0.0:python/ray/autoscaler/commands.py
 from ray.worker import global_worker
 from ray.util.debug import log_once
 
@@ -260,9 +264,16 @@ def _bootstrap_config(config: Dict[str, Any],
 
     provider_cls = importer(config["provider"])
 
+<<<<<<< HEAD:python/ray/autoscaler/_private/commands.py
     cli_logger.print("Checking {} environment settings",
                      _PROVIDER_PRETTY_NAMES.get(config["provider"]["type"]))
     resolved_config = provider_cls.bootstrap_config(config)
+=======
+    with cli_logger.timed(
+            "Checking {} environment settings",
+            PROVIDER_PRETTY_NAMES.get(config["provider"]["type"])):
+        resolved_config = provider_cls.bootstrap_config(config)
+>>>>>>> upstream/releases/1.0.0:python/ray/autoscaler/commands.py
 
     if not no_config_cache:
         with open(cache_key, "w") as f:
@@ -982,6 +993,7 @@ def rsync(config_file: str,
             if (source if down else target).startswith(remote_mount):
                 is_file_mount = True
                 break
+<<<<<<< HEAD:python/ray/autoscaler/_private/commands.py
 
     provider = _get_node_provider(config["provider"], config["cluster_name"])
 
@@ -1014,6 +1026,8 @@ def rsync(config_file: str,
             rsync(source, target, is_file_mount)
         else:
             updater.sync_file_mounts(rsync)
+=======
+>>>>>>> upstream/releases/1.0.0:python/ray/autoscaler/commands.py
 
     try:
         nodes = []

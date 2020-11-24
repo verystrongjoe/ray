@@ -128,7 +128,11 @@ setup_commands:
     # has your Ray repo pre-cloned. Then, you can replace the pip installs
     # below with a git checkout <your_sha> (and possibly a recompile).
     - echo 'export PATH="$HOME/anaconda3/envs/tensorflow_p36/bin:$PATH"' >> ~/.bashrc
+<<<<<<< HEAD
     - pip install -U https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp36-cp36m-manylinux1_x86_64.whl
+=======
+    - pip install -U https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.0.0-cp36-cp36m-manylinux1_x86_64.whl
+>>>>>>> upstream/releases/1.0.0
     # Consider uncommenting these if you also want to run apt-get commands during setup
     # - sudo pkill -9 apt-get || true
     # - sudo pkill -9 dpkg || true
@@ -136,7 +140,11 @@ setup_commands:
 
 # Custom commands that will be run on the head node after common setup.
 head_setup_commands:
+<<<<<<< HEAD
     - pip install 'boto3>=1.4.8'  # 1.4.8 adds InstanceMarketOptions
+=======
+    - pip install boto3>=1.4.8  # 1.4.8 adds InstanceMarketOptions
+>>>>>>> upstream/releases/1.0.0
 
 # Custom commands that will be run on worker nodes after common setup.
 worker_setup_commands: []

@@ -120,9 +120,12 @@ class MockProcessRunner:
     def clear_history(self):
         self.calls = []
 
+<<<<<<< HEAD
     def command_history(self):
         return [" ".join(cmd) for cmd in self.calls]
 
+=======
+>>>>>>> upstream/releases/1.0.0
     def respond_to_call(self, pattern, response_list):
         self.call_response[pattern] = response_list
 
@@ -472,7 +475,11 @@ class AutoscalingTest(unittest.TestCase):
         # Two initial calls to docker cp, one before run, two final calls to cp
         runner.respond_to_call(".State.Running",
                                ["false", "false", "false", "true", "true"])
+<<<<<<< HEAD
         commands.get_or_create_head_node(
+=======
+        get_or_create_head_node(
+>>>>>>> upstream/releases/1.0.0
             SMALL_CLUSTER,
             config_path,
             no_restart=False,
@@ -495,6 +502,7 @@ class AutoscalingTest(unittest.TestCase):
         runner.assert_has_call(
             "1.2.3.4",
             pattern="docker cp /tmp/ray_tmp_mount/~/ray_bootstrap_config.yaml")
+<<<<<<< HEAD
 
     @unittest.skipIf(sys.platform == "win32", "Failing on Windows.")
     def testRsyncCommandWithDocker(self):
@@ -589,6 +597,8 @@ class AutoscalingTest(unittest.TestCase):
             _runner=runner)
         runner.assert_has_call("172.0.0.4", pattern="rsync")
         runner.clear_history()
+=======
+>>>>>>> upstream/releases/1.0.0
 
     def testScaleUp(self):
         config_path = self.write_config(SMALL_CLUSTER)
@@ -808,11 +818,19 @@ class AutoscalingTest(unittest.TestCase):
         autoscaler.update()
         self.waitForNodes(2)
         # This node has num_cpus=0
+<<<<<<< HEAD
         lm.update(unmanaged_ip, {"CPU": 0}, True, {"CPU": 0}, True, {})
         autoscaler.update()
         self.waitForNodes(2)
         # 1 CPU task cannot be scheduled.
         lm.update(unmanaged_ip, {"CPU": 0}, True, {"CPU": 0}, True, {"CPU": 1})
+=======
+        lm.update(unmanaged_ip, {"CPU": 0}, {"CPU": 0}, {})
+        autoscaler.update()
+        self.waitForNodes(2)
+        # 1 CPU task cannot be scheduled.
+        lm.update(unmanaged_ip, {"CPU": 0}, {"CPU": 0}, {"CPU": 1})
+>>>>>>> upstream/releases/1.0.0
         autoscaler.update()
         self.waitForNodes(3)
 

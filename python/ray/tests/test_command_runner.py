@@ -160,6 +160,7 @@ def test_kubernetes_command_runner():
     ]
 
     assert process_runner.calls[0] == " ".join(expected)
+<<<<<<< HEAD
 
     logger = logging.getLogger("ray.autoscaler._private.command_runner")
     with pytest.raises(SystemExit) as pytest_wrapped_e, patch.object(
@@ -170,6 +171,8 @@ def test_kubernetes_command_runner():
     mock_logger_error.assert_called_once_with(failed_cmd_expected)
     assert pytest_wrapped_e.type == SystemExit
     assert pytest_wrapped_e.value.code == 1
+=======
+>>>>>>> upstream/releases/1.0.0
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows.")

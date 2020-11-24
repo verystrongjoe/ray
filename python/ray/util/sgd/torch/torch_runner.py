@@ -2,9 +2,12 @@ import logging
 import io
 import itertools
 
+<<<<<<< HEAD
 import ray
 import torch
 
+=======
+>>>>>>> upstream/releases/1.0.0
 from ray.util.sgd.torch.constants import USE_FP16, NUM_STEPS
 from ray.util.sgd import utils
 
@@ -67,6 +70,7 @@ class TorchRunner:
             apex_args=self.apex_args,
             scheduler_step_freq=self.scheduler_step_freq)
 
+<<<<<<< HEAD
     def get_iterator(self, training=True):
         if training:
             # In training.
@@ -110,6 +114,8 @@ class TorchRunner:
                     # Else, start cycling through the iterator again.
                     pass
 
+=======
+>>>>>>> upstream/releases/1.0.0
     def train_epoch(self,
                     num_steps=None,
                     profile=False,
@@ -255,9 +261,12 @@ class TorchRunner:
         """Getter method. Needed for remote actor calls."""
         return self.models
 
+<<<<<<< HEAD
     def get_node_ip(self):
         return ray.services.get_node_ip_address()
 
+=======
+>>>>>>> upstream/releases/1.0.0
     @property
     def models(self):
         return self.training_operator._get_original_models()

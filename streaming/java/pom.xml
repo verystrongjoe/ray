@@ -7,7 +7,11 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.ray</groupId>
   <artifactId>ray-streaming</artifactId>
+<<<<<<< HEAD
   <version>1.1.0-SNAPSHOT</version>
+=======
+  <version>1.0.0</version>
+>>>>>>> upstream/releases/1.0.0
   <packaging>pom</packaging>
   <name>Ray Project Streaming Parent POM</name>
   <description>A streaming framework built on ray</description>
@@ -63,7 +67,11 @@
   <properties>
     <java.version>1.8</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+<<<<<<< HEAD
     <projetct.version>1.1.0-SNAPSHOT</projetct.version>
+=======
+    <projetct.version>1.0.0</projetct.version>
+>>>>>>> upstream/releases/1.0.0
     <slf4j.version>1.7.25</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <testng.version>7.3.0</testng.version>

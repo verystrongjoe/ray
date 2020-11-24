@@ -102,7 +102,11 @@ class KubernetesSyncClient(SyncClient):
 
     """
 
+<<<<<<< HEAD
     def __init__(self, namespace: str, process_runner: Any = subprocess):
+=======
+    def __init__(self, namespace, process_runner=subprocess):
+>>>>>>> upstream/releases/1.0.0
         self.namespace = namespace
         self._process_runner = process_runner
         self._command_runners = {}

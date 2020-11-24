@@ -37,8 +37,16 @@ docker:
 
     # Example of running a GPU head with CPU workers
     # head_image: "rayproject/ray:0.8.7-gpu"
+<<<<<<< HEAD
 
     # worker_image: "rayproject/ray:0.8.7"
+=======
+    # head_run_options:
+    #     - --runtime=nvidia
+
+    # worker_image: "rayproject/ray:0.8.7"
+    # worker_run_options: []
+>>>>>>> upstream/releases/1.0.0
 
 # The autoscaler will scale up the cluster to this target fraction of resource
 # usage. For example, if a cluster of 10 nodes is 100% busy and
@@ -139,7 +147,11 @@ setup_commands:
 
 # Custom commands that will be run on the head node after common setup.
 head_setup_commands:
+<<<<<<< HEAD
     - pip install 'boto3>=1.4.8'  # 1.4.8 adds InstanceMarketOptions
+=======
+    - pip install boto3>=1.4.8  # 1.4.8 adds InstanceMarketOptions
+>>>>>>> upstream/releases/1.0.0
 
 # Custom commands that will be run on worker nodes after common setup.
 worker_setup_commands: []

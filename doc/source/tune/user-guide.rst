@@ -58,6 +58,7 @@ You can find an example of this in the :doc:`Keras MNIST example </tune/examples
 
 .. warning:: If 'gpu' is not set, ``CUDA_VISIBLE_DEVICES`` environment variable will be set as empty, disallowing GPU access.
 
+<<<<<<< HEAD
 **Troubleshooting**: Occasionally, you may run into GPU memory issues when running a new trial. This may be
 due to the previous trial not cleaning up its GPU state fast enough. To avoid this,
 you can use ``tune.utils.wait_for_gpu`` - see :ref:`docstring <tune-util-ref>`.
@@ -87,6 +88,8 @@ See :ref:`limiter` for more details.
 Distributed Tuning
 ~~~~~~~~~~~~~~~~~~
 
+=======
+>>>>>>> upstream/releases/1.0.0
 To attach to a Ray cluster, simply run ``ray.init`` before ``tune.run``. See :ref:`start-ray-cli` for more information about ``ray.init``:
 
 .. code-block:: python
@@ -95,7 +98,11 @@ To attach to a Ray cluster, simply run ``ray.init`` before ``tune.run``. See :re
     ray.init(address=<ray_address>)
     tune.run(trainable, num_samples=100, resources_per_trial={"cpu": 2, "gpu": 1})
 
+<<<<<<< HEAD
 Read more in the Tune :ref:`distributed experiments guide <tune-distributed>`.
+=======
+
+>>>>>>> upstream/releases/1.0.0
 
 .. _tune-default-search-space:
 

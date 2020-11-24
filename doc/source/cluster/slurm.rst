@@ -35,9 +35,15 @@ Starter SLURM script
   #SBATCH --tasks-per-node=1
   #SBATCH --time=00:30:00
   #SBATCH --reservation=test
+<<<<<<< HEAD
 
   let "worker_num=(${SLURM_NTASKS} - 1)"
 
+=======
+
+  let "worker_num=(${SLURM_NTASKS} - 1)"
+
+>>>>>>> upstream/releases/1.0.0
   # Define the total number of CPU cores available to ray
   let "total_cores=${worker_num} * ${SLURM_CPUS_PER_TASK}"
 
@@ -55,13 +61,22 @@ Starter SLURM script
   # Make sure the head successfully starts before any worker does, otherwise
   # the worker will not be able to connect to redis. In case of longer delay,
   # adjust the sleeptime above to ensure proper order.
+  
+  # Now we execute worker_num worker nodes on all nodes in the allocation except hostname by 
+  # specifying --nodes=${worker_num} and --exclude=`hostname`. Use 1 task per node, so worker_num tasks in total
+  # (--ntasks=${worker_num}) and 5 CPUs per task (--cps-per-task=${SLURM_CPUS_PER_TASK}).
+  srun --nodes=${worker_num} --ntasks=${worker_num} --cpus-per-task=${SLURM_CPUS_PER_TASK} --exclude=`hostname` ray start --address $ip_head --block --num-cpus ${SLURM_CPUS_PER_TASK} &
+  sleep 5
 
+<<<<<<< HEAD
   # Now we execute worker_num worker nodes on all nodes in the allocation except hostname by
   # specifying --nodes=${worker_num} and --exclude=`hostname`. Use 1 task per node, so worker_num tasks in total
   # (--ntasks=${worker_num}) and 5 CPUs per task (--cps-per-task=${SLURM_CPUS_PER_TASK}).
   srun --nodes=${worker_num} --ntasks=${worker_num} --cpus-per-task=${SLURM_CPUS_PER_TASK} --exclude=`hostname` ray start --address $ip_head --block --num-cpus ${SLURM_CPUS_PER_TASK} &
   sleep 5
 
+=======
+>>>>>>> upstream/releases/1.0.0
   python -u trainer.py ${total_cores} # Pass the total number of allocated CPUs
 
 .. code-block:: python

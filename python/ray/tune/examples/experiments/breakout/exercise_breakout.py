@@ -169,7 +169,7 @@ class UcbState:
 
 ############################################
 
-def experiment():
+def experiment(c):
 
     ucbstate = None
 
@@ -306,8 +306,3 @@ if __name__ == '__main__':
             f.write(f"'UCB True: ', {final_results[0]}\n")
             f.write(f"'UCB False: ', {final_results[1]}\n")
             f.close()
-
-
-
-
-

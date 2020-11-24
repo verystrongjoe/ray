@@ -188,6 +188,7 @@ outputs.
 
 See the :ref:`tune-autofilled-metrics` section for a glossary.
 
+
 How do I set resources?
 ~~~~~~~~~~~~~~~~~~~~~~~
 If you want to allocate specific resources to a trial, you can use the

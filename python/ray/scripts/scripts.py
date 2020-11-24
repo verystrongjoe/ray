@@ -160,11 +160,19 @@ def dashboard(cluster_config_file, cluster_name, port, remote_port):
     "--address", required=False, type=str, help="the address to use for Ray")
 @click.option(
     "--port",
+<<<<<<< HEAD
     type=int,
     required=False,
     help=f"the port of the head ray process. If not provided, defaults to "
     f"{ray_constants.DEFAULT_PORT}; if port is set to 0, we will"
     f" allocate an available port.")
+=======
+    required=False,
+    type=str,
+    help="the port of the head ray process. If not provided, tries to use "
+    "{0}, falling back to a random port if {0} is "
+    "not available".format(ray_constants.DEFAULT_PORT))
+>>>>>>> upstream/releases/1.0.0
 @click.option(
     "--redis-password",
     required=False,
@@ -368,6 +376,10 @@ def start(node_ip_address, address, port, redis_password, redis_shard_ports,
           log_color, verbose):
     """Start Ray processes manually on the local machine."""
     cli_logger.configure(log_style, log_color, verbose)
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/releases/1.0.0
     if gcs_server_port and not head:
         raise ValueError(
             "gcs_server_port can be only assigned when you specify --head.")
@@ -428,6 +440,7 @@ def start(node_ip_address, address, port, redis_password, redis_shard_ports,
         enable_object_reconstruction=enable_object_reconstruction,
         metrics_export_port=metrics_export_port)
     if head:
+<<<<<<< HEAD
         # Use default if port is none, allocate an available port if port is 0
         if port is None:
             port = ray_constants.DEFAULT_PORT
@@ -437,6 +450,8 @@ def start(node_ip_address, address, port, redis_password, redis_shard_ports,
                 s.bind(("", 0))
                 port = s.getsockname()[1]
 
+=======
+>>>>>>> upstream/releases/1.0.0
         num_redis_shards = None
         # Start Ray on the head node.
         if redis_shard_ports is not None:
@@ -543,8 +558,14 @@ def start(node_ip_address, address, port, redis_password, redis_shard_ports,
             cli_logger.abort("`{}` should not be specified without `{}`.",
                              cf.bold("--port"), cf.bold("--head"))
 
+<<<<<<< HEAD
             raise Exception("If --head is not passed in, --port is not "
                             "allowed.")
+=======
+            raise Exception(
+                "If --head is not passed in, --port and --redis-port are not "
+                "allowed.")
+>>>>>>> upstream/releases/1.0.0
         if redis_shard_ports is not None:
             cli_logger.abort("`{}` should not be specified without `{}`.",
                              cf.bold("--redis-shard-ports"), cf.bold("--head"))

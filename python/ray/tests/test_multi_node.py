@@ -414,17 +414,26 @@ def test_calling_start_ray_head(call_ray_stop_only):
     check_call_ray(["stop"])
 
     # Test starting Ray with redis shard ports specified.
+<<<<<<< HEAD
     check_call_ray([
         "start", "--head", "--redis-shard-ports", "6380,6381,6382", "--port",
         "0"
     ])
+=======
+    check_call_ray(
+        ["start", "--head", "--redis-shard-ports", "6380,6381,6382"])
+>>>>>>> upstream/releases/1.0.0
     check_call_ray(["stop"])
 
     # Test starting Ray with all arguments specified.
     check_call_ray([
         "start", "--head", "--redis-shard-ports", "6380,6381,6382",
         "--object-manager-port", "12345", "--num-cpus", "2", "--num-gpus", "0",
+<<<<<<< HEAD
         "--resources", "{\"Custom\": 1}", "--port", "0"
+=======
+        "--resources", "{\"Custom\": 1}"
+>>>>>>> upstream/releases/1.0.0
     ])
     check_call_ray(["stop"])
 

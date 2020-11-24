@@ -17,7 +17,11 @@ commands:
       OMP_NUM_THREADS=64 ray microbenchmark
     params:
     - name: ray_version # Ray version string.
+<<<<<<< HEAD
       default: "1.1.0.dev0"
+=======
+      default: "1.0.0"
+>>>>>>> upstream/releases/1.0.0
 
     - name: commit # Ray commit SHA string.
       default: "FILL ME IN"

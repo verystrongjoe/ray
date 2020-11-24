@@ -108,6 +108,7 @@ class ucb_state:
         self.check_reflected_reward = True
         self.last_update_n_refleceted_reward = 0
         self.last_score = 0
+        self.explore_c = explore_c
 
         if optimal_exploration:
             for i in range(self.K):
@@ -135,7 +136,7 @@ class ucb_state:
                 if self.num_of_selections[i] > 0:
                     average_reward = self.rewards[i] / self.num_of_selections[i]
                     delta_i = math.sqrt(2 * math.log(self.n + 1) / self.num_of_selections[i])
-                    upper_bound = average_reward + delta_i
+                    upper_bound = average_reward + self.explore_c * delta_i
                 else:
                     upper_bound = 1e400
                 if upper_bound > self.max_upper_bound:
@@ -184,7 +185,7 @@ def experiment():
     os.makedirs(SAVE_DIR, exist_ok=True)
 
     if IS_UCB:
-        ucbstate = ucb_state(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION)
+        ucbstate = UcbState(n_params=N_PARAMS, n_episode_iteration=N_EPISODE_STEP, optimal_exploration=OPTIMAL_EXPLORATION, explore_c=c)
 
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
@@ -293,32 +294,34 @@ def experiment():
 if __name__ == '__main__':
 
     for optimal_exploration in [True, False]:
-        final_results = []
-        for u in [True, False]:
-            list_accuracy = []
-            for i in range(N_EXPERIMENTS):
-                K = int(math.pow(2, N_PARAMS))
-                IS_UCB = u
-                IDX = i
-                OPTIMAL_EXPLORATION = optimal_exploration
-                EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}-{IDX}'
-                list_accuracy.append(experiment())
+        for c in range(2, 7, 2):
 
-            EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-            ## Save pickle
-            with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                pickle.dump(list_accuracy, fw)
-            print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-            avg_title = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
-            print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
-            final_results.append(np.average(list_accuracy))
+            final_results = []
 
-        EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{N_EPISODE_STEP}-{OPTIMAL_EXPLORATION}'
+            for u in [True, False]:
+                list_accuracy = []
+                for i in range(N_EXPERIMENTS):
+                    K = int(math.pow(2, N_PARAMS))
+                    IDX = i
+                    IS_UCB = u
+                    OPTIMAL_EXPLORATION = optimal_exploration
+                    list_accuracy.append(experiment(c))
 
-        print('============================final_result============================')
-        f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
-        print('UCB True: ', final_results[0])
-        print('UCB False: ', final_results[1])
-        f.write(f"'UCB True: ', {final_results[0]}\n")
-        f.write(f"'UCB False: ', {final_results[1]}\n")
-        f.close()
+                EXPERIMENT_NAME = f'pbt-cartpole-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
+                ## Save pickle
+                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                    pickle.dump(list_accuracy, fw)
+                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                avg_title = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
+                print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
+                final_results.append(np.average(list_accuracy))
+
+            EXPERIMENT_RESULT_NAME = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
+
+            print(f'============================ {EXPERIMENT_RESULT_NAME} final_result============================')
+            f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
+            print('UCB True: ', final_results[0])
+            print('UCB False: ', final_results[1])
+            f.write(f"'UCB True: ', {final_results[0]}\n")
+            f.write(f"'UCB False: ', {final_results[1]}\n")
+            f.close()

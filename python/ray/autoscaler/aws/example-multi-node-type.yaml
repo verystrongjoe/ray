@@ -32,16 +32,24 @@ available_node_types:
     gpu_1_ondemand:
         node_config:
             InstanceType: p2.xlarge
+<<<<<<< HEAD
         # Autoscaler will auto fill the CPU/GPU resources below.
         resources: {"Custom2": 2}
+=======
+        resources: {"CPU": 4, "GPU": 1, "Custom2": 2, "accelerator_type:K80": 1}
+>>>>>>> upstream/releases/1.0.0
         max_workers: 4
         worker_setup_commands:
             - pip install tensorflow-gpu  # Example command.
     gpu_8_ondemand:
         node_config:
             InstanceType: p3.8xlarge
+<<<<<<< HEAD
         # Autoscaler autofills the "resources" below.
         # resources: {"CPU": 32, "GPU": 4, "accelerator_type:V100": 1}
+=======
+        resources: {"CPU": 32, "GPU": 4, "accelerator_type:V100": 1}
+>>>>>>> upstream/releases/1.0.0
         max_workers: 2
         worker_setup_commands:
             - pip install tensorflow-gpu  # Example command.

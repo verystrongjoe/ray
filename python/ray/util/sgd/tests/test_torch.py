@@ -111,8 +111,11 @@ def test_apply_all_workers(ray_start_2_cpus, num_workers, use_local):
     results = trainer.apply_all_workers(fn)
     assert all(x == 1 for x in results)
 
+<<<<<<< HEAD
     trainer.shutdown()
 
+=======
+>>>>>>> upstream/releases/1.0.0
 
 @pytest.mark.parametrize("num_workers", [1, 2] if dist.is_available() else [1])
 @pytest.mark.parametrize("use_local", [True, False])
@@ -371,6 +374,7 @@ def test_dataset(ray_start_4_cpus, use_local):
 
 
 @pytest.mark.parametrize("use_local", [True, False])
+<<<<<<< HEAD
 def test_num_steps(ray_start_2_cpus, use_local):
     """Tests if num_steps continues training from the subsampled dataset."""
 
@@ -447,6 +451,8 @@ def test_num_steps(ray_start_2_cpus, use_local):
 
 
 @pytest.mark.parametrize("use_local", [True, False])
+=======
+>>>>>>> upstream/releases/1.0.0
 def test_split_batch(ray_start_2_cpus, use_local):
     if not dist.is_available():
         return

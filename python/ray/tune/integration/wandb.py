@@ -2,7 +2,10 @@ import os
 import pickle
 from multiprocessing import Process, Queue
 from numbers import Number
+<<<<<<< HEAD
 from typing import Callable, Dict, List, Tuple
+=======
+>>>>>>> upstream/releases/1.0.0
 import numpy as np
 
 from ray import logger

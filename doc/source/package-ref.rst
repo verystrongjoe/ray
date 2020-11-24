@@ -162,6 +162,7 @@ remove_placement_group
 
 .. autofunction:: ray.util.placement_group.remove_placement_group
 
+<<<<<<< HEAD
 get_current_placement_group
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -196,6 +197,8 @@ Histogram
 .. autoclass:: ray.util.metrics.Histogram
    :members:
 
+=======
+>>>>>>> upstream/releases/1.0.0
 Experimental APIs
 -----------------
 
