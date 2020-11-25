@@ -319,9 +319,8 @@ if __name__ == '__main__':
                     IDX = i
                     IS_UCB = u
                     OPTIMAL_EXPLORATION = optimal_exploration
-                    list_accuracy.append(experiment(c))
-
                     EXPERIMENT_NAME = f'pbt-mnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}-{i}'
+                    list_accuracy.append(experiment(c))
                     ## Save pickle
                     with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
                         pickle.dump(list_accuracy, fw)
