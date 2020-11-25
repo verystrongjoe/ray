@@ -321,12 +321,12 @@ if __name__ == '__main__':
                     OPTIMAL_EXPLORATION = optimal_exploration
                     list_accuracy.append(experiment(c))
 
-                EXPERIMENT_NAME = f'pbt-mnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
-                ## Save pickle
-                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                    pickle.dump(list_accuracy, fw)
-                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-                avg_title = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
+                    EXPERIMENT_NAME = f'pbt-mnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}-{i}'
+                    ## Save pickle
+                    with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                        pickle.dump(list_accuracy, fw)
+                    print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                avg_title = f'pbt-mnist-{c}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
                 final_results.append(np.average(list_accuracy))
 

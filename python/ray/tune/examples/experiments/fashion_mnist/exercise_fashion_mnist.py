@@ -52,7 +52,7 @@ parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=200)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='mnist_with_exploration')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='fmnist_with_exploration')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
@@ -85,7 +85,7 @@ if args.ucb:
 METRIC_NAME="mean_accuracy"
 SAVE_DIR = args.save_dir
 
-EXPERIMENT_NAME = 'pbt-mnist-ucb-v1.0'
+EXPERIMENT_NAME = 'pbt-fmnist-ucb-v1.0'
 #############################################
 # 실험 과정 및 결과 metrics
 # - accuracy or reward over training iteration (plot)
@@ -307,8 +307,8 @@ def experiment(c):
 
 if __name__ == '__main__':
 
-    for optimal_exploration in [False]:
-        for c in range(2, 6, 2):
+    for optimal_exploration in [True, False]:
+        for c in range(2, 7, 2):
 
             final_results = []
 
@@ -320,17 +320,16 @@ if __name__ == '__main__':
                     IS_UCB = u
                     OPTIMAL_EXPLORATION = optimal_exploration
                     list_accuracy.append(experiment(c))
-
-                EXPERIMENT_NAME = f'pbt-mnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
-                ## Save pickle
-                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                    pickle.dump(list_accuracy, fw)
-                print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
+                    EXPERIMENT_NAME = f'pbt-fmnist-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}-{i}'
+                    ## Save pickle
+                    with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                        pickle.dump(list_accuracy, fw)
+                    print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
                 avg_title = f'pbt-cartpole-{c}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
                 final_results.append(np.average(list_accuracy))
 
-            EXPERIMENT_RESULT_NAME = f'pbt-mnist-{c}-{OPTIMAL_EXPLORATION}'
+            EXPERIMENT_RESULT_NAME = f'pbt-fmnist-{c}-{OPTIMAL_EXPLORATION}'
 
             print(f'============================ {EXPERIMENT_RESULT_NAME} final_result============================')
             f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
