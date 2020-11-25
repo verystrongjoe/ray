@@ -204,7 +204,7 @@ def experiment(c):
             "gamma": lambda: random.uniform(0.9, 0.99),
             "smooth_target_policy": lambda: random.choice([True, False]),
             "lr": [1e-5, 5e-6, 1e-6, 5e-7, 1e-7],
-            "train_batch_size": lambda: random.randint(2500, 10000),  # sgd_minibatch_size must be smaller than train_batch_size
+            "train_batch_size": lambda: random.randint(25, 100),  # sgd_minibatch_size must be smaller than train_batch_size
         },
         custom_explore_fn=explore
     )
@@ -232,7 +232,7 @@ def experiment(c):
             "smooth_target_policy": True,
             "lr": 1e-6,  #1e-4,
             "train_batch_size": sample_from(
-                lambda spec: random.choice([2500, 5000, 10000])),
+                lambda spec: random.choice([25, 50, 100])),
             # "kl_coeff" : 0.2
             "num_gpus":1
         })
@@ -297,12 +297,11 @@ if __name__ == '__main__':
                     IDX = i
                     IS_UCB = u
                     OPTIMAL_EXPLORATION = optimal_exploration
+                    EXPERIMENT_NAME = f'pbt-mountain_car-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}-{i}'
                     list_accuracy.append(experiment(c))
-
-                EXPERIMENT_NAME = f'pbt-mountain_car-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
-                ## Save pickle
-                with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
-                    pickle.dump(list_accuracy, fw)
+                    ## Save pickle
+                    with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
+                        pickle.dump(list_accuracy, fw)
                 print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
                 avg_title = f'pbt-mountain_car-{c}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
