@@ -536,7 +536,8 @@ class PopulationBasedTraining(FIFOScheduler):
 
         if self._ucb is not None:
             if self._ucb.is_need_to_reflect_reward():
-                score = np.sum([t.last_result[self._metric] for t in self._trial_state])
+                # worker가 늦게 돌아가는 경우가 있어서 last_result가 None인 경우를 배제하고 평균값으로 대체!!
+                score = np.average([t.last_result[self._metric] for t in self._trial_state if self._metric in t.last_result.keys()])
                 self._ucb.reflect_reward(score)
 
             selected = self._ucb.pull()
@@ -549,7 +550,7 @@ class PopulationBasedTraining(FIFOScheduler):
                     new_config[key] = old_good_config[key]
 
         # todo: perturb취소하는 로직 추가
-            print(new_config)
+        print(new_config)
 
 
         if self._ucb is not None:

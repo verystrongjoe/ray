@@ -38,6 +38,7 @@ style.use("ggplot")
 import random
 datasets.MNIST("~/data", train=True, download=True)
 
+
 import math
 import heapq
 import pickle

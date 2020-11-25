@@ -94,9 +94,8 @@ CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 # 아래는 UCB State 추가함
 ############################################
 
-
-class ucb_state:
-    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action =0):
+class UcbState:
+    def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action=0, explore_c=1):
         self.n_params = n_params
         self.n = 0
         self.selected = 0

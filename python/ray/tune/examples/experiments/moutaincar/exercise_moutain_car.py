@@ -34,13 +34,13 @@ import pickle
 import argparse
 
 parser = argparse.ArgumentParser(description='PCB with Parameters')
-parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=10)
+parser.add_argument("-n_experiments", "--n_experiments", type=int, help="Number of experiments", default=20)
 parser.add_argument("-n_workers", "--n_workers", type=int, help="Number of workers", default=4)
 parser.add_argument("-ucb", "--ucb", action="store_true", help="turn on ucb")
 parser.add_argument("-perturbation_interval", "--perturbation_interval", type=int, help="Perturbation Interval", default=3)
 # parser.add_argument("-experiments", "--experiments", type=str, help="Experiments")
 parser.add_argument("-training_iteration", "--training_iteration", type=int, help="Training Iteration", default=50)
-parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='ppo_params_5')
+parser.add_argument("-save_dir", "--save_dir", type=str, help="Training Iteration", default='mountain_car_1125')
 parser.add_argument("-episode_step", "--episode_step", type=int, help="Episode step", default=5)
 
 args = parser.parse_args()
@@ -60,7 +60,7 @@ N_EXPERIMENTS = args.n_experiments
 TRAINING_ITERATION = args.training_iteration
 N_EPISODE_STEP = args.episode_step
 DEFAULT_ACTION = 0
-N_PARAMS = 6
+N_PARAMS = 5
 K = int(math.pow(2, N_PARAMS))
 NUM_WORKERS = args.n_workers
 PERTUBATION_INTERVAL = args.perturbation_interval
@@ -73,14 +73,15 @@ if args.ucb:
 METRIC_NAME = 'episode_reward_mean'
 SAVE_DIR = args.save_dir
 
-EXPERIMENT_NAME = 'pbt-pong-ucb-v1.0'
+
+EXPERIMENT_NAME = 'pbt-mountain_car-ucb-v1.0'
 #############################################
 # 실험 과정 및 결과 metrics
 # - accuracy or reward over training iteration (plot)
 # - cumulative selected count of bandit over training iteration (plot)
 # - cumulative rewards of bandit over training iteration (plot)
 
-# cartpole도 동일하게 실험 비교 (cartpole은 5개의 bandit)
+# mountain_car도 동일하게 실험 비교 (mountain_car은 5개의 bandit)
 # 위 실험이 너무 간단하게 끝나면 learning rate 낮추어 고정하고 나머지 조합으로 해보고
 # 그래도 안되면 humanioid 로 실험 변경
 # 적어도 2개의 실험 결과를 가져갈것
@@ -92,7 +93,6 @@ CUMULATIVE_SELECTED_COUNT_EACH_BANDIT = [[]] * K
 ############################################
 # 아래는 UCB State 추가함
 ############################################
-
 
 class UcbState:
     def __init__(self, n_params=2, n_episode_iteration=5, optimal_exploration=True, default_action=0, explore_c=1):
@@ -166,6 +166,17 @@ class UcbState:
             return False
 ############################################
 
+# Postprocess the perturbed config to ensure it's still valid
+def explore(config):
+    # ensure we collect enough timesteps to do sgd
+    # if config["train_batch_size"] < config["sgd_minibatch_size"] * 2:
+    #     config["train_batch_size"] = config["sgd_minibatch_size"] * 2
+    # # ensure we run at least one sgd iter
+    # if config["num_sgd_iter"] < 1:
+    #     config["num_sgd_iter"] = 1
+    return config
+
+
 def experiment(c):
 
     ucbstate = None
@@ -183,13 +194,19 @@ def experiment(c):
         perturbation_interval=PERTUBATION_INTERVAL,
         hyperparam_mutations={
             # distribution for resampling
-            "lambda": lambda: random.uniform(0.9, 1.0),
-            "clip_param": lambda: random.uniform(0.01, 0.5),
-            "lr": [2e-5, 5e-5, 1e-5],    # [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
-            "num_sgd_iter": lambda: random.randint(1, 30),
-            "sgd_minibatch_size": lambda: random.randint(128, 2048),
-            "train_batch_size": lambda: random.randint(2000, 160000),
-        }
+            # "lambda": lambda: random.uniform(0.9, 1.0),
+            # "clip_param": lambda: random.uniform(0.01, 0.5),
+            # "lr": [2e-7, 5e-7, 1e-7],    # [1e-3, 5e-4, 1e-4, 5e-5, 1e-5],
+            # "num_sgd_iter": lambda: random.randint(1, 30),
+            # "sgd_minibatch_size": lambda: random.randint(128, 512),  # sgd_minibatch_size must be smaller than train_batch_size
+            # # "train_batch_size": lambda: random.randint(2000, 5000),
+            # # "kl_coeff": lambda :random.uniform(0.1, 0.5)
+            "gamma": lambda: random.uniform(0.9, 0.99),
+            "smooth_target_policy": lambda: random.choice([True, False]),
+            "lr": [1e-5, 5e-6, 1e-6, 5e-7, 1e-7],
+            "train_batch_size": lambda: random.randint(2500, 10000),  # sgd_minibatch_size must be smaller than train_batch_size
+        },
+        custom_explore_fn=explore
     )
 
     ray.shutdown()  # Restart Ray defensively in case the ray connection is lost.
@@ -197,11 +214,10 @@ def experiment(c):
     ray.init(log_to_driver=False)
 
     analysis = tune.run(
-        'PPO',
+        'DDPG',
         name=EXPERIMENT_NAME,
         scheduler=scheduler,
         # reuse_actors=True,
-        # resources_per_trial={"cpu": 128, "gpu":1},
         checkpoint_freq=20,
         verbose=1,
         stop={
@@ -210,19 +226,15 @@ def experiment(c):
         num_samples=NUM_WORKERS,
         # PBT starts by training many neural networks in parallel with random hyperparameters.
         config={
-            "env": 'Pong-v0',
+            "env": 'MountainCarContinuous-v0',
             # These params are tuned from a fixed starting value.
-            "lambda": 0.95,
-            "clip_param": 0.2,
-            "lr": 1e-5,  #1e-4,
-            # These params start off randomly drawn from a set.
-            "num_sgd_iter": sample_from(
-                lambda spec: random.choice([10, 20, 30])),
-            "sgd_minibatch_size": sample_from(
-                lambda spec: random.choice([128, 512, 2048])),
+            "gamma": 0.95,
+            "smooth_target_policy": True,
+            "lr": 1e-6,  #1e-4,
             "train_batch_size": sample_from(
-                lambda spec: random.choice([10000, 20000, 40000])),
-            # "num_gpus" :1
+                lambda spec: random.choice([2500, 5000, 10000])),
+            # "kl_coeff" : 0.2
+            "num_gpus":1
         })
 
     # Plot by wall-clock time
@@ -287,16 +299,16 @@ if __name__ == '__main__':
                     OPTIMAL_EXPLORATION = optimal_exploration
                     list_accuracy.append(experiment(c))
 
-                EXPERIMENT_NAME = f'pbt-pong-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
+                EXPERIMENT_NAME = f'pbt-mountain_car-{IS_UCB}-{c}-{OPTIMAL_EXPLORATION}'
                 ## Save pickle
                 with open(f"{SAVE_DIR}/{EXPERIMENT_NAME}_results.pickle", "wb") as fw:
                     pickle.dump(list_accuracy, fw)
                 print(f'{EXPERIMENT_NAME} list of accuracy : {list_accuracy}')
-                avg_title = f'pbt-pong-{c}-{OPTIMAL_EXPLORATION}'
+                avg_title = f'pbt-mountain_car-{c}-{OPTIMAL_EXPLORATION}'
                 print(f'average accuracy over {avg_title} experiments ucb {u} : {np.average(list_accuracy)}')
                 final_results.append(np.average(list_accuracy))
 
-            EXPERIMENT_RESULT_NAME = f'pbt-pong-{c}-{OPTIMAL_EXPLORATION}'
+            EXPERIMENT_RESULT_NAME = f'pbt-mountain_car-{c}-{OPTIMAL_EXPLORATION}'
 
             print(f'============================ {EXPERIMENT_RESULT_NAME} final_result============================')
             f = open(f"{SAVE_DIR}/{EXPERIMENT_RESULT_NAME}_result.txt", "w+")
